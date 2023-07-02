@@ -9,21 +9,21 @@ use Time::HiRes;
 
 =begin License
 
-    Transport data between applications (IPC) via Storable library
-    Copyright (C) 2023  Dominik Bernhardt
+	Transport data between applications (IPC) via Storable library
+	Copyright (C) 2023  Dominik Bernhardt
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 =end License
 =cut
@@ -39,6 +39,9 @@ use Time::HiRes;
 
 	v0.2.1 Beta
 	Extended how_to
+
+	v1
+	Bugfixes and release
 
 =end Meta_data
 =cut
@@ -104,12 +107,12 @@ sub new {
 			};
 		}
 
-	if ( $obj_self->{_str_path} =~ m{^[a-z0-9]+$}i ) {
+	if ( $obj_self->{_str_path} && $obj_self->{_str_path} =~ m{^[a-z0-9]+$}i ) {
 		my $bol_working_found	= 0;
 
 		test_dir:
 		foreach my $str_dir ( qw( /dev/shm /run /tmp ) ) {
-			if ( -d $str_dir ) {
+			if ( -d $str_dir && -w $str_dir ) {
 				$obj_self->{_str_path}		= qq{$str_dir/IPC__Storable-Shm_$obj_self->{_str_path}};
 				$bol_working_found		= 1;
 				last(test_dir);
@@ -121,7 +124,7 @@ sub new {
 			die qq{$str_caller : Can't find any suitable directory\nIs this a systemd *NIX?\n};
 			}
 		}
-	elsif ( -d $obj_self->{_str_path} ) {
+	elsif ( $obj_self->{_str_path} && -d $obj_self->{_str_path} ) {
 		die qq{"$obj_self->{_str_path}": A folder can't be a share memory file!\n};
 		}
 
@@ -136,7 +139,7 @@ sub new {
 sub _check {
 	my $obj_self		= shift;
 
-	if ( -s $obj_self->{_str_path} && open(my $fh, "<", $obj_self->{_str_path}) ) {
+	if ( $obj_self->{_str_path} && -s $obj_self->{_str_path} && open(my $fh, "<", $obj_self->{_str_path}) ) {
 		flock($fh, 2);
 
 		eval { retrieve($obj_self->{_str_path}) };
@@ -147,6 +150,11 @@ sub _check {
 		if ( $@ ) {
 			die qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$@\n};
 			}
+		}
+	elsif ( ! defined($obj_self->{_str_path}) ) {
+		my(undef, undef, undef, $str_caller)	= caller(0);
+		print STDERR qq{$str_caller : Missing argument!\n};
+		return(0);
 		}
 
 	return(1);
@@ -196,7 +204,18 @@ sub main_lock {
 
 		if ( $bol_multiple && $obj_self->_multiple_allowed() ) {
 			$obj_self->token_lock();
-			$obj_self->_set_pids( $obj_self->_get_pids(), $$ );
+			my @int_pids	= $obj_self->_get_pids();
+
+
+			if ( grep { $_ == $$ } @int_pids ) {
+				print STDERR qq{WARNING: Same process tried to main_lock() again.\n};
+				$obj_self->token_unlock();
+				return(0);
+				}
+			else {
+				$obj_self->_set_pids( @int_pids, $$ );
+				}
+
 			$obj_self->token_unlock();
 			}
 		else {
@@ -209,6 +228,9 @@ sub main_lock {
 	else {
 		if ( open(my $fh, ">", $obj_self->{_str_path}) ) {
 			close($fh);
+
+			$obj_self->{_har_data}->{bol_multiple}		= 1;
+			push(@{$obj_self->{_har_data}->{are_pids}}, $$);
 
 			lock_store($obj_self->{_har_data}, $obj_self->{_str_path});
 			}
@@ -246,6 +268,10 @@ sub main_unlock {
 sub token_lock {
 	my $obj_self		= shift;
 	my $int_token		= undef;
+
+	if ( ! -e $obj_self->{_str_path} ) {
+		die qq{Lock file missing\nHave you called main_lock() ?\n};
+		}
 
 	while ( 1 ) {
 		if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
