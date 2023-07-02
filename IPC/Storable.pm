@@ -31,8 +31,9 @@ use Time::HiRes;
 =begin Meta_data
 
 	v0.1 Beta
-	I often had problems installing IPC::Sharable on different platforms. So I built
-	this library runable with only (Enterprise Linux) default Perl installation.
+	I often had problems installing IPC::Sharable on different platforms.
+	So I built this library runable with only (Enterprise Linux) default
+	Perl installation.
 
 	v0.2 Beta
 	Missing control added
@@ -42,6 +43,9 @@ use Time::HiRes;
 
 	v1
 	Bugfixes and release
+
+	v1.1
+	Now protects content of the file, only accessible by owner.
 
 =end Meta_data
 =cut
@@ -228,6 +232,8 @@ sub main_lock {
 		if ( open(my $fh, ">", $obj_self->{_str_path}) ) {
 			close($fh);
 
+			chmod(0600, $obj_self->{_str_path});
+
 			$obj_self->{_har_data}->{bol_multiple}		= 1;
 			push(@{$obj_self->{_har_data}->{are_pids}}, $$);
 
@@ -269,7 +275,7 @@ sub token_lock {
 	my $int_token		= undef;
 
 	if ( ! -e $obj_self->{_str_path} ) {
-		die qq{Lock file missing\nHave you called main_lock() ?\n};
+		die qq{Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
 	while ( 1 ) {
