@@ -206,7 +206,6 @@ sub main_lock {
 			$obj_self->token_lock();
 			my @int_pids	= $obj_self->_get_pids();
 
-
 			if ( grep { $_ == $$ } @int_pids ) {
 				print STDERR qq{WARNING: Same process tried to main_lock() again.\n};
 				$obj_self->token_unlock();
