@@ -37,6 +37,9 @@ use Time::HiRes;
 	v0.2 Beta
 	Missing control added
 
+	v0.2.1 Beta
+	Extended how_to
+
 =end Meta_data
 =cut
 
@@ -69,6 +72,13 @@ $bol_succcess	= $object->set_custom_data($reference);		# Save any data as refere
 $reference	= $object->get_custom_data();			# Load custom data block
 
 $bol_succcess	= $object->token_unlock();			# We're done and next one's turn is now
+
+$bol_succcess	= $object->main_unlock();			# Removes PID from lock file on MULTIPLE. If
+								# no more PIDs are within the lockfile it re-
+								# moves the lock file as well.
+								# Hint: The user of the library must take
+								# care when to main_unlock() e.g. wait until
+								# all child processes died.
 
 =end how_to
 =cut
@@ -222,8 +232,6 @@ sub main_unlock {
 			$obj_self->token_unlock();
 			}
 		else {
-			$obj_self->token_unlock();
-
 			unlink($obj_self->{_str_path});
 			}
 
