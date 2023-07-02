@@ -30,9 +30,12 @@ use Time::HiRes;
 
 =begin Meta_data
 
-	Version 0.1 Beta
+	v0.1 Beta
 	I often had problems installing IPC::Sharable on different platforms. So I built
 	this library runable with only (Enterprise Linux) default Perl installation.
+
+	v0.2 Beta
+	Missing control added
 
 =end Meta_data
 =cut
@@ -94,10 +97,12 @@ sub new {
 	if ( $obj_self->{_str_path} =~ m{^[a-z0-9]+$}i ) {
 		my $bol_working_found	= 0;
 
+		test_dir:
 		foreach my $str_dir ( qw( /dev/shm /run /tmp ) ) {
 			if ( -d $str_dir ) {
 				$obj_self->{_str_path}		= qq{$str_dir/IPC__Storable-Shm_$obj_self->{_str_path}};
 				$bol_working_found		= 1;
+				last(test_dir);
 				}
 			}
 
