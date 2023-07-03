@@ -51,6 +51,9 @@ use Time::HiRes;
 	Better target name handling.
 	Enable user to use a second argument for manipulating chmod.
 
+	v1.3
+	Solved DESTROY bug
+
 =end Meta_data
 =cut
 
@@ -146,9 +149,11 @@ sub new {
 sub DESTROY {
 	my $obj_self		= shift;
 
-	if ( -e $obj_self->{_str_path} ) {
+	if ( -e $obj_self->{_str_path} && grep { $$ == $_ } $obj_self->_get_pids() ) {
 		$obj_self->main_unlock();
 		}
+
+	return(1);
 	}
 
 sub _check {
