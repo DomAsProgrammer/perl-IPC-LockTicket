@@ -47,16 +47,21 @@ use Time::HiRes;
 	v1.1
 	Now protects content of the file, only accessible by owner.
 
+	v1.2
+	Better target name handling.
+	Enable user to use a second argument for manipulating chmod.
+
 =end Meta_data
 =cut
 
 =begin how_to
 
-my $object	= IPC::Storable->new(qq{name});			# For SPEED:	Creates a shared handle within
+my $object	= IPC::Storable->new(qq{name}, <chmod num>);	# For SPEED:	Creates a shared handle within
 								# /dev/shm (allowed symbols: m{^[a-z0-9]+$}i)
 								# name like name
 
-my $object	= IPC::Storable->new(qq{/absolute/path.file})	# For STORAGE:	Creates a shared handle at the
+my $object	= IPC::Storable->new(qq{/absolute/path.file}, <chmod num>)
+								# For STORAGE:	Creates a shared handle at the
 								# given path (must be a file name)
 
 $bol_succcess	= $object->main_lock(1);			# For MULTIPLE usage: allows calling main_lock()
@@ -101,6 +106,7 @@ sub new {
 	else {
 		$obj_self	= {
 			_str_path	=> shift(@mxd_attributes),
+			_int_permission	=> shift(@mxd_attributes),
 			_har_data	=> {
 				bol_multiple		=> 0,
 				are_pids		=> [],		# main_lock() mechanism
@@ -111,7 +117,7 @@ sub new {
 			};
 		}
 
-	if ( $obj_self->{_str_path} && $obj_self->{_str_path} =~ m{^[a-z0-9]+$}i ) {
+	if ( $obj_self->{_str_path} && $obj_self->{_str_path} =~ m{^[-_a-z0-9]+$}i ) {
 		my $bol_working_found	= 0;
 
 		test_dir:
@@ -128,9 +134,6 @@ sub new {
 			die qq{$str_caller : Can't find any suitable directory\nIs this a systemd *NIX?\n};
 			}
 		}
-	elsif ( $obj_self->{_str_path} && -d $obj_self->{_str_path} ) {
-		die qq{"$obj_self->{_str_path}": A folder can't be a share memory file!\n};
-		}
 
 	if ( &_check($obj_self) ) {
 		bless($obj_self, $str_class);
@@ -140,25 +143,48 @@ sub new {
 	return(undef);
 	}
 
+sub DESTROY {
+	my $obj_self		= shift;
+
+	if ( -e $obj_self->{_str_path} ) {
+		$obj_self->main_unlock();
+		}
+	}
+
 sub _check {
 	my $obj_self		= shift;
+	my $str_errors		= '';
 
 	if ( $obj_self->{_str_path} && -s $obj_self->{_str_path} && open(my $fh, "<", $obj_self->{_str_path}) ) {
 		flock($fh, 2);
 
 		eval { retrieve($obj_self->{_str_path}) };
 
-		my(undef, undef, undef, $str_caller)	= caller(0);
-		close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
-
 		if ( $@ ) {
-			die qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$@\n};
+			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$@\n};
 			}
+
+		my(undef, undef, undef, $str_caller)	= caller(0);
+		close($fh) or $str_errors .= qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 	elsif ( ! defined($obj_self->{_str_path}) ) {
 		my(undef, undef, undef, $str_caller)	= caller(0);
-		print STDERR qq{$str_caller : Missing argument!\n};
-		return(0);
+		$str_errors		.= qq{$str_caller : Missing argument!\n};
+		}
+
+	if ( $obj_self->{_str_path} && -d $obj_self->{_str_path} ) {
+		$str_errors	.= qq{"$obj_self->{_str_path}": A folder can't be a share memory file!\n};
+		}
+	if ( $obj_self->{_str_path} !~ m{^\.?\.?/.+$} ) {
+		$str_errors	.= qq{"$obj_self->{_str_path}": is an inadequate path or name!\n};
+		}
+
+	if ( ! defined($obj_self->{_int_permission}) ) {
+		$obj_self->{_int_permission}	= 0600;
+		}
+
+	if ( $str_errors ) {
+		die $str_errors;
 		}
 
 	return(1);
@@ -232,7 +258,7 @@ sub main_lock {
 		if ( open(my $fh, ">", $obj_self->{_str_path}) ) {
 			close($fh);
 
-			chmod(0600, $obj_self->{_str_path});
+			chmod($obj_self->{_int_permission}, $obj_self->{_str_path});
 
 			$obj_self->{_har_data}->{bol_multiple}		= 1;
 			push(@{$obj_self->{_har_data}->{are_pids}}, $$);
