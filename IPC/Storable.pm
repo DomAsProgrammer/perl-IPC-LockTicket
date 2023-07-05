@@ -58,6 +58,9 @@ use Time::HiRes;
 	Proper error message on missing lock file.
 	Speed improvement by NOT sleeping
 
+	v1.4.1
+	Just some prettier output.
+
 =end Meta_data
 =cut
 
@@ -138,7 +141,7 @@ sub new {
 
 		if ( ! $bol_working_found ) {
 			my $str_caller	= (caller(0))[0];
-			die qq{$str_caller : Can't find any suitable directory\nIs this a systemd *NIX?\n};
+			die qq{$str_caller(): Can't find any suitable directory\nIs this a systemd *NIX?\n};
 			}
 		}
 
@@ -174,11 +177,11 @@ sub _check {
 			}
 
 		my $str_caller	= (caller(0))[3];
-		close($fh) or $str_errors .= qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
+		close($fh) or $str_errors .= qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 	elsif ( ! defined($obj_self->{_str_path}) ) {
 		my $str_caller	= (caller(0))[3];
-		$str_errors		.= qq{$str_caller : Missing argument!\n};
+		$str_errors		.= qq{$str_caller(): Missing argument!\n};
 		}
 
 	if ( $obj_self->{_str_path} && -d $obj_self->{_str_path} ) {
@@ -221,7 +224,7 @@ sub _set_pids {
 		store($obj_self->{_har_data}, $obj_self->{_str_path});
 
 		my $str_caller	= (caller(0))[3];
-		close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
+		close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 
 	return(1);
@@ -258,7 +261,7 @@ sub main_lock {
 			}
 		else {
 			my $str_caller	= (caller(0))[3];
-			print STDERR qq{$str_caller : Already locked ($obj_self->{_str_path})\n};
+			print STDERR qq{$str_caller(): Already locked ($obj_self->{_str_path})\n};
 
 			return(0);
 			}
@@ -331,7 +334,7 @@ sub token_lock {
 				}
 
 			my $str_caller	= (caller(0))[3];
-			close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
+			close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 
 			if ( $obj_self->{_har_data}->{int_token_current} >= $int_token ) {
 				return(1);
@@ -357,7 +360,7 @@ sub token_unlock {
 		store($obj_self->{_har_data}, $obj_self->{_str_path});
 
 		my $str_caller	= (caller(0))[3];
-		close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
+		close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 	}
 
@@ -372,7 +375,7 @@ sub set_custom_data {
 
 	if ( !( ref($ref_data) || ! defined($ref_data) ) ) {
 		my $str_caller	= (caller(0))[3];
-		die qq{$str_caller : ref_data=:"$ref_data" is not a reference nor NULL\n};
+		die qq{$str_caller(): ref_data=:"$ref_data" is not a reference nor NULL\n};
 		}
 
 	if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
@@ -399,7 +402,7 @@ sub set_custom_data {
 		store($obj_self->{_har_data}, $obj_self->{_str_path});
 
 		my $str_caller	= (caller(0))[3];
-		close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
+		close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 
 	return(1);
