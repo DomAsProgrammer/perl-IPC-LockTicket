@@ -54,6 +54,10 @@ use Time::HiRes;
 	v1.3
 	Solved DESTROY bug
 
+	v1.4
+	Proper error message on missing lock file.
+	Speed improvement by NOT sleeping
+
 =end Meta_data
 =cut
 
@@ -133,7 +137,7 @@ sub new {
 			}
 
 		if ( ! $bol_working_found ) {
-			my($str_caller)	= caller(0);
+			my $str_caller	= (caller(0))[0];
 			die qq{$str_caller : Can't find any suitable directory\nIs this a systemd *NIX?\n};
 			}
 		}
@@ -169,11 +173,11 @@ sub _check {
 			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$@\n};
 			}
 
-		my(undef, undef, undef, $str_caller)	= caller(0);
+		my $str_caller	= (caller(0))[3];
 		close($fh) or $str_errors .= qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 	elsif ( ! defined($obj_self->{_str_path}) ) {
-		my(undef, undef, undef, $str_caller)	= caller(0);
+		my $str_caller	= (caller(0))[3];
 		$str_errors		.= qq{$str_caller : Missing argument!\n};
 		}
 
@@ -216,7 +220,7 @@ sub _set_pids {
 
 		store($obj_self->{_har_data}, $obj_self->{_str_path});
 
-		my(undef, undef, undef, $str_caller)		= caller(0);
+		my $str_caller	= (caller(0))[3];
 		close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 
@@ -253,8 +257,8 @@ sub main_lock {
 			$obj_self->token_unlock();
 			}
 		else {
-			my(undef, undef, undef, $str_caller)	= caller(0);
-			print STDERR qq{$str_caller : Already locked\n};
+			my $str_caller	= (caller(0))[3];
+			print STDERR qq{$str_caller : Already locked ($obj_self->{_str_path})\n};
 
 			return(0);
 			}
@@ -277,6 +281,11 @@ sub main_lock {
 
 sub main_unlock {
 	my $obj_self		= shift;
+
+	if ( ! -e $obj_self->{_str_path} ) {
+		my $str_caller	= (caller(0))[3];
+		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		}
 
 	if ( $obj_self->_multiple_allowed() ) {
 		my @int_pids	= ();
@@ -306,7 +315,8 @@ sub token_lock {
 	my $int_token		= undef;
 
 	if ( ! -e $obj_self->{_str_path} ) {
-		die qq{Lock file missing\nHave you ever called main_lock() ?\n};
+		my $str_caller	= (caller(0))[3];
+		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
 	while ( 1 ) {
@@ -320,14 +330,11 @@ sub token_lock {
 				store($obj_self->{_har_data}, $obj_self->{_str_path});
 				}
 
-			my(undef, undef, undef, $str_caller)	= caller(0);
+			my $str_caller	= (caller(0))[3];
 			close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
 
 			if ( $obj_self->{_har_data}->{int_token_current} >= $int_token ) {
 				return(1);
-				}
-			else {
-				Time::HiRes::sleep(0.2);
 				}
 			}
 		}
@@ -335,6 +342,11 @@ sub token_lock {
 
 sub token_unlock {
 	my $obj_self		= shift;
+
+	if ( ! -e $obj_self->{_str_path} ) {
+		my $str_caller	= (caller(0))[3];
+		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		}
 
 	if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
 		flock($fh, 2);
@@ -344,7 +356,7 @@ sub token_unlock {
 		$obj_self->{_har_data}->{int_token_current}++;
 		store($obj_self->{_har_data}, $obj_self->{_str_path});
 
-		my(undef, undef, undef, $str_caller)	= caller(0);
+		my $str_caller	= (caller(0))[3];
 		close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 	}
@@ -353,8 +365,13 @@ sub set_custom_data {
 	my $obj_self		= shift;
 	my $ref_data		= shift;
 
+	if ( ! -e $obj_self->{_str_path} ) {
+		my $str_caller	= (caller(0))[3];
+		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		}
+
 	if ( !( ref($ref_data) || ! defined($ref_data) ) ) {
-		my(undef, undef, undef, $str_caller)	= caller(0);
+		my $str_caller	= (caller(0))[3];
 		die qq{$str_caller : ref_data=:"$ref_data" is not a reference nor NULL\n};
 		}
 
@@ -381,7 +398,7 @@ sub set_custom_data {
 
 		store($obj_self->{_har_data}, $obj_self->{_str_path});
 
-		my(undef, undef, undef, $str_caller)	= caller(0);
+		my $str_caller	= (caller(0))[3];
 		close($fh) or die qq{$str_caller : Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 
@@ -390,6 +407,11 @@ sub set_custom_data {
 
 sub get_custom_data {
 	my $obj_self		= shift;
+
+	if ( ! -e $obj_self->{_str_path} ) {
+		my $str_caller	= (caller(0))[3];
+		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		}
 
 	$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
 
