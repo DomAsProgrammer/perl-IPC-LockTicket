@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-package IPC::Storable;
+package IPC::Lockable;
 
 use strict;
 use warnings;
@@ -60,17 +60,20 @@ use Time::HiRes;
 
 	v1.4.1
 	Just some prettier output.
+	
+	v1.5
+	Renamed
 
 =end Meta_data
 =cut
 
 =begin how_to
 
-my $object	= IPC::Storable->new(qq{name}, <chmod num>);	# For SPEED:	Creates a shared handle within
+my $object	= IPC::Lockable->new(qq{name}, <chmod num>);	# For SPEED:	Creates a shared handle within
 								# /dev/shm (allowed symbols: m{^[a-z0-9]+$}i)
 								# name like name
 
-my $object	= IPC::Storable->new(qq{/absolute/path.file}, <chmod num>)
+my $object	= IPC::Lockable->new(qq{/absolute/path.file}, <chmod num>)
 								# For STORAGE:	Creates a shared handle at the
 								# given path (must be a file name)
 
@@ -133,7 +136,7 @@ sub new {
 		test_dir:
 		foreach my $str_dir ( qw( /dev/shm /run /tmp ) ) {
 			if ( -d $str_dir && -w $str_dir ) {
-				$obj_self->{_str_path}		= qq{$str_dir/IPC__Storable-Shm_$obj_self->{_str_path}};
+				$obj_self->{_str_path}		= qq{$str_dir/IPC__Lockable-Shm_$obj_self->{_str_path}};
 				$bol_working_found		= 1;
 				last(test_dir);
 				}
@@ -338,6 +341,9 @@ sub token_lock {
 
 			if ( $obj_self->{_har_data}->{int_token_current} >= $int_token ) {
 				return(1);
+				}
+			else {
+				Time::HiRes::sleep(0.001);	# Needed to prevent permanent spamming on CPU and FS
 				}
 			}
 		}
