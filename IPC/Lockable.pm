@@ -64,6 +64,9 @@ use Time::HiRes;
 	v1.5
 	Renamed
 
+	v1.5.1
+	Fewer output
+
 =end Meta_data
 =cut
 
@@ -263,9 +266,6 @@ sub main_lock {
 			$obj_self->token_unlock();
 			}
 		else {
-			my $str_caller	= (caller(0))[3];
-			print STDERR qq{$str_caller(): Already locked ($obj_self->{_str_path})\n};
-
 			return(0);
 			}
 		}
@@ -343,7 +343,7 @@ sub token_lock {
 				return(1);
 				}
 			else {
-				Time::HiRes::sleep(0.001);	# Needed to prevent permanent spamming on CPU and FS
+				Time::HiRes::sleep(0.005);	# Needed to prevent permanent spamming on CPU and FS
 				}
 			}
 		}
