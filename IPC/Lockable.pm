@@ -67,6 +67,9 @@ use Time::HiRes;
 	v1.5.1
 	Fewer output
 
+	1.6
+	Read/write permission check
+
 =end Meta_data
 =cut
 
@@ -113,7 +116,6 @@ $bol_succcess	= $object->main_unlock();			# Removes PID from lock file on MULTIP
 
 sub new {
 	my $str_class		= shift;
-	my @mxd_attributes	= @_;
 	my $obj_self		= {};
 
 	if ( ref($str_class) ) {	# Clone
@@ -121,9 +123,9 @@ sub new {
 		}
 	else {
 		$obj_self	= {
-			_str_path	=> shift(@mxd_attributes),
-			_int_permission	=> shift(@mxd_attributes),
-			_har_data	=> {
+			_str_path			=> shift,
+			_int_permission			=> shift,
+			_har_data		=> {
 				bol_multiple		=> 0,
 				are_pids		=> [],		# main_lock() mechanism
 				ref_cust_data		=> undef,
@@ -200,6 +202,12 @@ sub _check {
 	if ( ! defined($obj_self->{_int_permission}) ) {
 		$obj_self->{_int_permission}	= 0600;
 		}
+	elsif ( $obj_self->{_str_path} && ! -r $obj_self->{_str_path} ) {
+		$str_errors	.= qq{"$obj_self->{_str_path}": No read permission.\n};
+		}
+	elsif ( $obj_self->{_str_path} && ! -w $obj_self->{_str_path} ) {
+		$str_errors	.= qq{"$obj_self->{_str_path}": No write permission.\n};
+		}
 
 	if ( $str_errors ) {
 		die $str_errors;
@@ -248,7 +256,7 @@ sub main_lock {
 	my $obj_self		= shift;
 	my $bol_multiple	= shift;
 
-	if ( -e $obj_self->{_str_path} && $obj_self->_check() ) {
+	if ( -e $obj_self->{_str_path} && $obj_self->_check() ) {	# Dies in _check if failed
 
 		if ( $bol_multiple && $obj_self->_multiple_allowed() ) {
 			$obj_self->token_lock();
@@ -279,6 +287,9 @@ sub main_lock {
 			push(@{$obj_self->{_har_data}->{are_pids}}, $$);
 
 			lock_store($obj_self->{_har_data}, $obj_self->{_str_path});
+			}
+		else {
+			return(0);
 			}
 		}
 
