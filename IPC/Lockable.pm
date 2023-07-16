@@ -67,8 +67,12 @@ use Time::HiRes;
 	v1.5.1
 	Fewer output
 
-	1.6
-	Read/write permission check
+	v1.6
+	Read/write permission check.
+
+	v1.6.1
+	Read/write permission bug solved.
+	Better working DESTROY function.
 
 =end Meta_data
 =cut
@@ -165,7 +169,37 @@ sub DESTROY {
 	my $obj_self		= shift;
 
 	if ( -e $obj_self->{_str_path} && grep { $$ == $_ } $obj_self->_get_pids() ) {
-		$obj_self->main_unlock();
+		my @int_pids	= do {
+			local $SIG{CLD}		= q{IGNORE};
+			local $SIG{CHLD}	= q{IGNORE};
+
+			grep { kill(0 => $_) } grep { $_ != $$ } $obj_self->_get_pids();
+			};
+
+		if ( @int_pids && $obj_self->_multiple_allowed() && open(my $fh, "<", $obj_self->{_str_path}) ) {
+			flock($fh, 2);
+
+			$obj_self->{_har_data}	= retrieve($obj_self->{_str_path});
+
+			$obj_self->{_har_data}->{are_pids}	= [ do {
+				local $SIG{CLD}			= q{IGNORE};
+				local $SIG{CHLD}		= q{IGNORE};
+
+				grep { kill(0 => $_) } grep { $_ != $$ } @{$obj_self->{_har_data}->{are_pids}};
+				} ];
+
+			store($obj_self->{_har_data}, $obj_self->{_str_path});
+
+			my $str_caller	= (caller(0))[3];
+			close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+
+			if ( ! @{$obj_self->{_har_data}->{are_pids}} ) {
+				unlink($obj_self->{_str_path});
+				}
+			}
+		else {
+			unlink($obj_self->{_str_path});
+			}
 		}
 
 	return(1);
@@ -202,10 +236,10 @@ sub _check {
 	if ( ! defined($obj_self->{_int_permission}) ) {
 		$obj_self->{_int_permission}	= 0600;
 		}
-	elsif ( $obj_self->{_str_path} && ! -r $obj_self->{_str_path} ) {
+	elsif ( -e $obj_self->{_str_path} && ! -r $obj_self->{_str_path} ) {
 		$str_errors	.= qq{"$obj_self->{_str_path}": No read permission.\n};
 		}
-	elsif ( $obj_self->{_str_path} && ! -w $obj_self->{_str_path} ) {
+	elsif ( -e $obj_self->{_str_path} && ! -w $obj_self->{_str_path} ) {
 		$str_errors	.= qq{"$obj_self->{_str_path}": No write permission.\n};
 		}
 
@@ -309,7 +343,12 @@ sub main_unlock {
 
 		$obj_self->token_lock();
 
-		@int_pids	= grep { local $SIG{CLD} = q{IGNORE}; local $SIG{CHLD} = q{IGNORE}; kill(0 => $_) } grep { $_ != $$ } $obj_self->_get_pids();
+		@int_pids	= do {
+			local $SIG{CLD}		= q{IGNORE};
+			local $SIG{CHLD}	= q{IGNORE};
+
+			grep { kill(0 => $_) } grep { $_ != $$ } $obj_self->_get_pids();
+			};
 
 		if ( @int_pids ) {
 			$obj_self->_set_pids(@int_pids);
