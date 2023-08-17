@@ -6,6 +6,8 @@ use strict;
 use warnings;
 use Storable qw(store retrieve lock_store lock_retrieve);
 use Time::HiRes;
+use feature qw( unicode_strings current_sub unicode_eval fc );
+use open qw( :std :encoding(UTF-8) );
 
 =begin License
 
@@ -73,6 +75,9 @@ use Time::HiRes;
 	v1.6.1
 	Read/write permission bug solved.
 	Better working DESTROY function.
+
+	v1.6.2
+	False coded bol_multiple corrected.
 
 =end Meta_data
 =cut
@@ -291,7 +296,6 @@ sub main_lock {
 	my $bol_multiple	= shift;
 
 	if ( -e $obj_self->{_str_path} && $obj_self->_check() ) {	# Dies in _check if failed
-
 		if ( $bol_multiple && $obj_self->_multiple_allowed() ) {
 			$obj_self->token_lock();
 			my @int_pids	= $obj_self->_get_pids();
@@ -311,13 +315,13 @@ sub main_lock {
 			return(0);
 			}
 		}
-	else {
+	elsif ( ! -e $obj_self->{_str_path} ) {
 		if ( open(my $fh, ">", $obj_self->{_str_path}) ) {
 			close($fh);
 
 			chmod($obj_self->{_int_permission}, $obj_self->{_str_path});
 
-			$obj_self->{_har_data}->{bol_multiple}		= 1;
+			$obj_self->{_har_data}->{bol_multiple}		= ( $bol_multiple ) ? 1 : 0;
 			push(@{$obj_self->{_har_data}->{are_pids}}, $$);
 
 			lock_store($obj_self->{_har_data}, $obj_self->{_str_path});
@@ -325,6 +329,9 @@ sub main_lock {
 		else {
 			return(0);
 			}
+		}
+	else {
+		return(0);
 		}
 
 	return(1);
