@@ -1,13 +1,13 @@
 #!/usr/bin/perl
 
-package IPC::Lockable;
+=begin meta_information
 
-use strict;
-use warnings;
-use Storable qw(store retrieve lock_store lock_retrieve);
-use Time::HiRes;
-use feature qw( unicode_strings current_sub unicode_eval fc );
-use open qw( :std :encoding(UTF-8) );
+	License:		GPLv3 - see license file or http://www.gnu.org/licenses/gpl.html
+	Program-version:	<see below>
+	Description:		Libriary for IPC and token based lock mechanism.
+	Contact:		Dominik Bernhardt - domasprogrammer@gmail.com or https://github.com/DomAsProgrammer
+
+=end meta_information
 
 =begin License
 
@@ -30,7 +30,7 @@ use open qw( :std :encoding(UTF-8) );
 =end License
 =cut
 
-=begin Meta_data
+=begin Version
 
 	v0.1 Beta
 	I often had problems installing IPC::Sharable on different platforms.
@@ -79,7 +79,11 @@ use open qw( :std :encoding(UTF-8) );
 	v1.6.2
 	False coded bol_multiple corrected.
 
-=end Meta_data
+	v1.6.3
+	Code quality increased.
+	Added dependency: boolean and Try
+
+=end Version
 =cut
 
 =begin how_to
@@ -123,6 +127,54 @@ $bol_succcess	= $object->main_unlock();			# Removes PID from lock file on MULTIP
 =end how_to
 =cut
 
+=begin variables
+
+	str	string
+	 L sql	sql code
+	 L ver	version number
+	 L bin	binary data, also base64
+	 L hex  hex coded data
+	 L pth	path
+
+	int	integer number
+	 L cnt	counter
+
+	flt	floating point number
+
+	bol	boolean
+
+	ref	reference
+	 L rxp	regular expression
+	 L are	array reference
+	 L har	hash array reference
+	  L obj	object
+
+=end variables
+=cut
+
+package IPC::Lockable;
+
+##### L I B R I A R I E S #####
+
+use strict;
+use warnings;
+use Storable qw(store retrieve lock_store lock_retrieve);
+use Time::HiRes;
+use feature qw( unicode_strings current_sub fc );
+use open qw( :std :encoding(UTF-8) );
+use utf8;
+### MetaCPAN
+use Try;
+use boolean;
+
+
+##### D E C L A R A T I O N #####
+$ENV{LANG}			= q{en_GB.UTF-8};
+$ENV{LANGUAGE}			= q{en_GB};
+
+
+##### M E T H O D S #####
+
 sub new {
 	my $str_class		= shift;
 	my $obj_self		= {};
@@ -135,7 +187,7 @@ sub new {
 			_str_path			=> shift,
 			_int_permission			=> shift,
 			_har_data		=> {
-				bol_multiple		=> 0,
+				bol_multiple		=> false,
 				are_pids		=> [],		# main_lock() mechanism
 				ref_cust_data		=> undef,
 				int_token_next		=> 0,		# token_lock() mechanism
@@ -145,13 +197,13 @@ sub new {
 		}
 
 	if ( $obj_self->{_str_path} && $obj_self->{_str_path} =~ m{^[-_a-z0-9]+$}i ) {
-		my $bol_working_found	= 0;
+		my $bol_working_found	= false;
 
 		test_dir:
 		foreach my $str_dir ( qw( /dev/shm /run /tmp ) ) {
 			if ( -d $str_dir && -w $str_dir ) {
 				$obj_self->{_str_path}		= qq{$str_dir/IPC__Lockable-Shm_$obj_self->{_str_path}};
-				$bol_working_found		= 1;
+				$bol_working_found		= true;
 				last(test_dir);
 				}
 			}
@@ -217,9 +269,10 @@ sub _check {
 	if ( $obj_self->{_str_path} && -s $obj_self->{_str_path} && open(my $fh, "<", $obj_self->{_str_path}) ) {
 		flock($fh, 2);
 
-		eval { retrieve($obj_self->{_str_path}) };
-
-		if ( $@ ) {
+		try {
+			retrieve($obj_self->{_str_path})
+			}
+		catch {
 			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$@\n};
 			}
 
@@ -321,7 +374,7 @@ sub main_lock {
 
 			chmod($obj_self->{_int_permission}, $obj_self->{_str_path});
 
-			$obj_self->{_har_data}->{bol_multiple}		= ( $bol_multiple ) ? 1 : 0;
+			$obj_self->{_har_data}->{bol_multiple}		= ( $bol_multiple ) ? true : false;
 			push(@{$obj_self->{_har_data}->{are_pids}}, $$);
 
 			lock_store($obj_self->{_har_data}, $obj_self->{_str_path});
