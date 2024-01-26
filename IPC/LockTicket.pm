@@ -9,7 +9,7 @@
 
 =end meta_information
 
-=begin License
+=begin license
 
 	Transport data between applications (IPC) via Storable library
 	Copyright (C) 2023  Dominik Bernhardt
@@ -27,10 +27,9 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-=end License
-=cut
+=end license
 
-=begin Version
+=begin version_history
 
 	v0.1 Beta
 	I often had problems installing IPC::Sharable on dif-
@@ -95,8 +94,7 @@
 	Now working with a FIFO array, but nothing should change
 	for the lib user.
 
-=end Version
-=cut
+=end version_history
 
 =begin how_to
 
@@ -139,9 +137,10 @@ $bol_succcess	= $object->main_unlock();			# Removes PID from lock file on MULTIP
 								# all child processes died.
 
 =end how_to
-=cut
 
-=begin variables
+=begin comment
+
+	V A R I A B L E  N A M I N G
 
 	str	string
 	 L sql	sql code
@@ -149,28 +148,30 @@ $bol_succcess	= $object->main_unlock();			# Removes PID from lock file on MULTIP
 	 L ver	version number
 	 L bin	binary data, also base64
 	 L hex  hex coded data
-	 L pth	path
+	 L uri	path or url
 
 	int	integer number
 	 L cnt	counter
 	 L pid	process id number
-	 L tme	seconds since period
-	 L cnt	counter
+	 L tsp	seconds since period
 
 	flt	floating point number
 
 	bol	boolean
 
+	mxd	unkown data (mixed)
+
 	ref	reference
 	 L rxp	regular expression
 	 L are	array reference
-	 L tbl	table - ( a hash array with PK as identifier OR an array ) AND hash arrays as values
 	 L dsc	file discriptor (type glob)
-	 L _sub	anonymous subfunction before Perl v5.26
+	 L sub	anonymous subfunction	- DO NO LONGER USE, since Perl v5.26 functions can be declared lexically non-anonymous!
 	 L har	hash array reference
-	  L obj	object
+	  L tbl	table (a hash array with PK as key OR a multidimensional array AND hash arrays as values)
+	  L obj	object (very often)
 
-=end variables
+=end comment
+
 =cut
 
 ##### C L A S S  D E F I N I T I O N #####
@@ -182,18 +183,18 @@ use strict;
 use warnings;
 use Storable qw(store retrieve lock_store lock_retrieve);	# Base for this library
 use Time::HiRes;
-use feature qw( unicode_strings current_sub fc );
-use open qw( :std :encoding(UTF-8) );				# Full UTF-8 support
+use feature qw(unicode_strings current_sub fc);
+use open qw(:std :encoding(UTF-8));				# Full UTF-8 support
 use utf8;							# Full UTF-8 support
-use List::Util qw( first );
+use List::Util qw(first);
 ### MetaCPAN
 use Try;							# Better replacement for eval()
 use boolean;							# Boolean type support
 
 
 ##### D E C L A R A T I O N #####
-local $ENV{LANG}		= q{en_GB.UTF-8};
-local $ENV{LANGUAGE}		= q{en_GB};
+local $ENV{LANG}		= q{C.UTF-8};
+local $ENV{LANGUAGE}		= q{C.UTF-8};
 
 
 ##### M E T H O D S #####
