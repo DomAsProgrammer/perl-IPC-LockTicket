@@ -94,6 +94,9 @@
 	Now working with a FIFO array, but nothing should change
 	for the lib user.
 
+	v2.1
+	Some bugfixes.
+
 =end version_history
 
 =begin how_to
@@ -315,16 +318,18 @@ sub _check {
 		my $str_caller	= (caller(0))[3];
 		close($fh) or $str_errors .= qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 		}
+	# User failure
 	elsif ( ! defined($obj_self->{_str_path}) ) {
 		my $str_caller	= (caller(0))[3];
 		$str_errors		.= qq{$str_caller(): Missing argument!\n};
 		}
-	# If open failes
+	# If open() failes
 	elsif ( -e $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
 		$str_errors		.= qq{$str_caller(): Unable to open "$obj_self->{_str_path}"!\n};
 		}
 
+	# Some more fine tuning
 	if ( $obj_self->{_str_path} && -d $obj_self->{_str_path} ) {
 		$str_errors	.= qq{"$obj_self->{_str_path}": A folder can't be a share memory file!\n};
 		}
@@ -336,10 +341,12 @@ sub _check {
 	if ( ! defined($obj_self->{_int_permission}) ) {
 		$obj_self->{_int_permission}	= 0600;
 		}
-	elsif ( -e $obj_self->{_str_path} && ! -r $obj_self->{_str_path} ) {
+
+	# Check permissions
+	if ( -e $obj_self->{_str_path} && ! -r $obj_self->{_str_path} ) {
 		$str_errors	.= qq{"$obj_self->{_str_path}": No read permission.\n};
 		}
-	elsif ( -e $obj_self->{_str_path} && ! -w $obj_self->{_str_path} ) {
+	if ( -e $obj_self->{_str_path} && ! -w $obj_self->{_str_path} ) {
 		$str_errors	.= qq{"$obj_self->{_str_path}": No write permission.\n};
 		}
 
