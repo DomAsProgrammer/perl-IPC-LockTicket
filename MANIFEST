@@ -1,5 +1,4 @@
-lib/IPC/LockTicket.pm
-lib/IPC/Lockable.pm
 Makefile.PL
+lib/IPC/LockTicket.pm
 LICENSE
 MANIFEST

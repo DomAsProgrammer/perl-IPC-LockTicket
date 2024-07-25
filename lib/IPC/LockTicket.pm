@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 =begin meta_information
 
@@ -97,6 +97,17 @@
 	v2.1
 	Some bugfixes.
 
+	v2.2
+	Implemented Carp and Exporter.
+	Declared version.
+
+	v2.3
+	Used END block to properly end the program.
+
+	v2.4
+	Switched to perl 5.40.0, removed Try and replaced by
+	feature q{try}
+
 =end version_history
 
 =begin how_to
@@ -190,14 +201,29 @@ use feature qw(unicode_strings current_sub fc);
 use open qw(:std :encoding(UTF-8));				# Full UTF-8 support
 use utf8;							# Full UTF-8 support
 use List::Util qw(first);
+use Carp;
+use Exporter;
 ### MetaCPAN
-use Try;							# Better replacement for eval()
+use feature q{try};						# Better replacement for eval()
 use boolean;							# Boolean type support
+
+BEGIN {	# Good practice of Exporter but we don't have anything to export
+	our @EXPORT_OK	= ();
+	our $VERSION	= q{2.4};
+	}
+
+END {
+	end_procedure();
+	}
+
+$SIG{INT}		= \&end_procedure;
+$SIG{TERM}		= \&end_procedure;
 
 
 ##### D E C L A R A T I O N #####
-local $ENV{LANG}		= q{C.UTF-8};
-local $ENV{LANGUAGE}		= q{C.UTF-8};
+$ENV{LANG}		= q{C.UTF-8};
+$ENV{LANGUAGE}		= q{C.UTF-8};
+my @obj_EndSelf		= ();
 
 
 ##### M E T H O D S #####
@@ -238,12 +264,13 @@ sub new {
 		# Stop if no fitting dir was found
 		if ( ! $bol_working_found ) {
 			my $str_caller	= (caller(0))[0];
-			die qq{$str_caller(): Can't find any suitable directory\nIs this a systemd *NIX?\n};
+			croak qq{$str_caller(): Can't find any suitable directory\nIs this a systemd *NIX?\n};
 			}
 		}
 
 	if ( &_check($obj_self) ) {
 		bless($obj_self, $str_class);
+		push(@obj_EndSelf, $obj_self);
 		return($obj_self);
 		}
 
@@ -311,8 +338,8 @@ sub _check {
 		try {
 			retrieve($obj_self->{_str_path})
 			}
-		catch {
-			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$@\n};
+		catch ($str_Error) {
+			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$str_Error\n};
 			}
 
 		my $str_caller	= (caller(0))[3];
@@ -351,7 +378,7 @@ sub _check {
 		}
 
 	if ( $str_errors ) {
-		die $str_errors;
+		croak $str_errors;
 		}
 
 	return(true);
@@ -455,7 +482,7 @@ sub main_unlock {
 
 	if ( ! -e $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
-		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
 	if ( $obj_self->_multiple_allowed() ) {
@@ -502,7 +529,7 @@ sub token_lock {
 
 	if ( ! -e $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
-		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
 	while ( true ) {
@@ -552,7 +579,7 @@ sub token_unlock {
 
 	if ( ! -e $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
-		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
 	if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
@@ -566,7 +593,7 @@ sub token_unlock {
 
 		my $str_caller				= (caller(0))[3];
 		if ( $int_removed->{pid_agent} != $$ ) {
-			warn qq{$str_caller(): Removed PID $int_removed->{pid_agent} while running under PID $$ (should be the same)\n};
+			carp qq{$str_caller(): Removed PID $int_removed->{pid_agent} while running under PID $$ (should be the same)\n};
 			}
 		close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 		}
@@ -579,12 +606,12 @@ sub set_custom_data {
 
 	if ( ! -e $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
-		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
 	if ( !( ref($ref_data) || ! defined($ref_data) ) ) {
 		my $str_caller	= (caller(0))[3];
-		die qq{$str_caller(): ref_data=:"$ref_data" is not a reference nor NULL\n};
+		croak qq{$str_caller(): ref_data=:"$ref_data" is not a reference nor NULL\n};
 		}
 
 	if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
@@ -623,12 +650,18 @@ sub get_custom_data {
 
 	if ( ! -e $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
-		die qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
 	$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
 
 	return($obj_self->{_har_data}->{ref_cust_data});
+	}
+
+sub end_procedure {
+	foreach my $obj_self ( @obj_EndSelf ) {
+		&DESTROY($obj_self);
+		}
 	}
 
 1;
