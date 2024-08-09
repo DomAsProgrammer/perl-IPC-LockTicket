@@ -105,8 +105,12 @@
 	Used END block to properly end the program.
 
 	v2.4
-	Switched to perl 5.40.0, removed Try and replaced by
+	Switched to Perl v5.40.0, removed Try and replaced by
 	feature q{try}
+
+	v2.5
+	Perl v5.40.0 also supports boolean values nativly.
+	Removed boolean and used builtin's true and false.
 
 =end version_history
 
@@ -197,19 +201,18 @@ use strict;
 use warnings;
 use Storable qw(store retrieve lock_store lock_retrieve);	# Base for this library
 use Time::HiRes;
-use feature qw(unicode_strings current_sub fc);
+use feature qw(try unicode_strings current_sub fc);
 use open qw(:std :encoding(UTF-8));				# Full UTF-8 support
 use utf8;							# Full UTF-8 support
 use List::Util qw(first);
 use Carp;
 use Exporter;
 ### MetaCPAN
-use feature q{try};						# Better replacement for eval()
-use boolean;							# Boolean type support
+use builtin qw( true false );
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.4};
+	our $VERSION	= q{2.5};
 	}
 
 END {
