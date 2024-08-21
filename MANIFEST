@@ -2,3 +2,4 @@ Makefile.PL
 lib/IPC/LockTicket.pm
 LICENSE
 MANIFEST
+README.md

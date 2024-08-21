@@ -112,6 +112,9 @@
 	Perl v5.40.0 also supports boolean values nativly.
 	Removed boolean and used builtin's true and false.
 
+	v2.6
+	Bugfix of lock_retrieve() on scrambled files.
+
 =end version_history
 
 =begin how_to
@@ -212,7 +215,7 @@ use builtin qw( true false );
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.5};
+	our $VERSION	= q{2.6};
 	}
 
 END {
@@ -342,19 +345,19 @@ sub _check {
 			retrieve($obj_self->{_str_path})
 			}
 		catch ($str_Error) {
-			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file\n$str_Error\n};
+			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
 			}
 
 		my $str_caller	= (caller(0))[3];
 		close($fh) or $str_errors .= qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
 		}
 	# User failure
-	elsif ( ! defined($obj_self->{_str_path}) ) {
+	elsif ( ! $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
 		$str_errors		.= qq{$str_caller(): Missing argument!\n};
 		}
 	# If open() failes
-	elsif ( -e $obj_self->{_str_path} ) {
+	elsif ( -s $obj_self->{_str_path} ) {
 		my $str_caller	= (caller(0))[3];
 		$str_errors		.= qq{$str_caller(): Unable to open "$obj_self->{_str_path}"!\n};
 		}
@@ -391,7 +394,13 @@ sub _check {
 sub _get_pids {
 	my $obj_self		= shift;
 
-	$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+	try {
+		$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+		}
+	catch ($str_Error) {
+		carp qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
+		return(undef);
+		}
 
 	return(@{$obj_self->{_har_data}->{are_pids}});
 	}
@@ -421,7 +430,13 @@ sub _set_pids {
 sub _multiple_allowed {
 	my $obj_self		= shift;
 
-	$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+	try {
+		$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+		}
+	catch ($str_Error) {
+		carp qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
+		return(undef);
+		}
 
 	return($obj_self->{_har_data}->{bol_multiple});
 	}
@@ -656,7 +671,13 @@ sub get_custom_data {
 		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
 		}
 
-	$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+	try {
+		$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+		}
+	catch ($str_Error) {
+		carp qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
+		return(undef);
+		}
 
 	return($obj_self->{_har_data}->{ref_cust_data});
 	}
