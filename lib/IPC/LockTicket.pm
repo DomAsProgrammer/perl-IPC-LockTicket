@@ -115,6 +115,9 @@
 	v2.6
 	Bugfix of lock_retrieve() on scrambled files.
 
+	v2.7
+	Detection and warning of orphan lock files.
+
 =end version_history
 
 =begin how_to
@@ -215,7 +218,7 @@ use builtin qw( true false );
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.6};
+	our $VERSION	= q{2.7};
 	}
 
 END {
@@ -455,7 +458,7 @@ sub main_lock {
 			my @int_pids	= $obj_self->_get_pids();
 
 			if ( grep { $_ == $$ } @int_pids ) {
-				print STDERR qq{WARNING: Same process tried to main_lock() again.\n};
+				carp qq{WARNING: Same process tried to main_lock() again.\n};
 				$obj_self->token_unlock();
 				return(false);
 				}
@@ -464,10 +467,31 @@ sub main_lock {
 				}
 
 			$obj_self->token_unlock();
+			return(true);
 			}
-		# Or we fail
+		# Or it must be exclusive
 		else {
-			return(false);
+			$obj_self->token_lock();
+			my @int_pids	  	= $obj_self->_get_pids();
+
+			local $SIG{CLD} 	= q{IGNORE};
+			local $SIG{CHLD}	= q{IGNORE};
+
+			# Did we lock up?
+			if ( grep { $$ == $_ } @int_pids ) {
+				carp qq{WARNING: Same process tried to main_lock() again.\n};
+				$obj_self->token_unlock();
+				return(false);
+				}
+			# There are processes running on this lock file
+			elsif ( grep { kill(0 => $_) } @int_pids ) {
+				$obj_self->token_unlock();
+				return(false);
+				}
+			else {
+				carp qq{ERROR: Was the former instance not exited porperly?\nOrphan lock file found: "$obj_self->{_str_path}".};
+				return(false);
+				}
 			}
 		}
 	# Create file and write our format
