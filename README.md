@@ -10,6 +10,11 @@ within the database table.
 ## WHAT THIS LIBRARY IS NOT FOR
 This is not a fifo nor TCP pipe implementation.
 
+## UPDATES
+With version 2.8 much things were renamed. Tests must be run be-
+fore finally integrating it. Things will work as before, but
+using the the old functions will throw warnings.
+
 ## INSTALLATION
 Run `perl -V:installsitelib` and take the path returned for the
 location to save LockTicket.pm therefore. In theory the path

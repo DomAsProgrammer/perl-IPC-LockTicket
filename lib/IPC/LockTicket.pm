@@ -79,7 +79,7 @@
 	Better working DESTROY function.
 
 	v1.6.2
-	False coded bol_multiple corrected.
+	False coded bol_AllowMultiple corrected.
 
 	v1.6.3
 	Code quality increased.
@@ -118,49 +118,54 @@
 	v2.7
 	Detection and warning of orphan lock files.
 
+	v2.8
+	New terminology
+	Compatibility layer
+
+	v2.9
+	Removed compatibility layer
+
 =end version_history
 
-=begin how_to
+=head1 HOW TO
 
-use IPC::LockTicket;
+ use IPC::LockTicket;
 
-my $object	= IPC::LockTicket->new(qq{name}, <chmod num>);	# For SPEED:	Creates a shared handle within
+ my $object	= IPC::LockTicket->New(qq{name}, <chmod num>);	# For SPEED:	Creates a shared handle within
 								# /dev/shm (allowed symbols: m{^[a-z0-9]+$}i)
 								# name like name
 
-my $object	= IPC::LockTicket->new(qq{/absolute/path.file}, <chmod num>)
+ my $object	= IPC::LockTicket->New(qq{/absolute/path.file}, <chmod num>)
 								# For STORAGE:	Creates a shared handle at the
 								# given path (must be a file name)
 
-$bol_succcess	= $object->main_lock(1);			# For MULTIPLE usage: allows calling main_lock()
+ $bol_succcess	= $object->MainLock(1);				# For MULTIPLE usage: allows calling MainLock()
 								# multiple times on same file to allow IPC even
 								# if it's not from a fork (applies only on same
 								# name or file) i.e. it's not failing on
-								# main_lock() if file exists
+								# MainLock() if file exists
 
-$bol_succcess	= $object->main_lock();				# Creates shm/lock-file or if existing and
+ $bol_succcess	= $object->MainLock();				# Creates shm/lock-file or if existing and
 								# MULTIPLE is active for file and new object
 								# it implements the PID
 
-$bol_succcess	= $object->token_lock();			# Get a ticket to queue up - blocks until it's
+ $bol_succcess	= $object->TokenLock();			# Get a ticket to queue up - blocks until it's
 								# our turn
 
-$bol_succcess	= $object->set_custom_data($reference);		# Save any data as reference - be aware this
+ $bol_succcess	= $object->SetCustomData($reference);		# Save any data as reference - be aware this
 								# decreases speed and you fastly run out of
 								# space
 
-$reference	= $object->get_custom_data();			# Load custom data block
+ $reference	= $object->GetCustomData();			# Load custom data block
 
-$bol_succcess	= $object->token_unlock();			# We're done and next one's turn is now
+ $bol_succcess	= $object->TokenUnlock();			# We're done and next one's turn is now
 
-$bol_succcess	= $object->main_unlock();			# Removes PID from lock file on MULTIPLE. If
+ $bol_succcess	= $object->MainUnlock();			# Removes PID from lock file on MULTIPLE. If
 								# no more PIDs are within the lockfile it re-
 								# moves the lock file as well.
 								# Hint: The user of the library must take
-								# care when to main_unlock() e.g. wait until
+								# care when to MainUnlock() e.g. wait until
 								# all child processes died.
-
-=end how_to
 
 =begin comment
 
@@ -214,19 +219,19 @@ use List::Util qw(first);
 use Carp;
 use Exporter;
 ### MetaCPAN
-use builtin qw( true false );
+use builtin qw(true false);
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.7};
+	our $VERSION	= q{2.8};
 	}
 
 END {
-	end_procedure();
+	_EndProcedure();
 	}
 
-$SIG{INT}		= \&end_procedure;
-$SIG{TERM}		= \&end_procedure;
+$SIG{INT}		= \&_EndProcedure;
+$SIG{TERM}		= \&_EndProcedure;
 
 
 ##### D E C L A R A T I O N #####
@@ -237,48 +242,50 @@ my @obj_EndSelf		= ();
 
 ##### M E T H O D S #####
 
-sub new {
-	my $str_class		= shift;
+sub New {
+	my $str_Class		= shift;
 	my $obj_self	= {
-		_str_path			=> shift,	# Path or name for Storable
-		_int_permission			=> shift,	# Permissons for the created file
-		pid_parent			=> $$,
-		_har_data		=> {
-			bol_multiple		=> false,	# Allows multiple locks on same file
-			are_pids		=> [],		# main_lock() mechanism ; list of parents
-			ref_cust_data		=> undef,	# Place to save data for lib user
-			are_token		=> [		# Array for FIFO handling
+		_uri_Path			=> shift,	# Path or name for Storable
+		_int_Permission			=> shift,	# Permissons for the created file
+		_pid_Parent			=> $$,
+		_har_Data		=> {
+			bol_AllowMultiple	=> false,	# Allows multiple locks on same file
+			are_PIDs		=> [],		# MainLock() mechanism ; list of parents
+			ref_CustomData		=> undef,	# Place to save data for lib user
+			are_Token		=> [		# Array for FIFO handling
 				#{
-					# pid_agent	=> PID,
-					# pid_parent	=> PID,
+					# _pid_Agent	=> PID,
+					# _pid_Parent	=> PID,
 					#},
 				],
 			},
 		};
 
 	# If name is not a path or a name with prohibited characters
-	if ( $obj_self->{_str_path} && $obj_self->{_str_path} =~ m{^[-_a-z0-9]+$}i ) {
-		my $bol_working_found	= false;
+	if ( $obj_self->{_uri_Path}
+	&& $obj_self->{_uri_Path} =~ m{^[-_a-z0-9]+$}i ) {
+		my $bol_WorkingDirFound	= false;
 
 		# Find a fitting directory
 		test_dir:
-		foreach my $str_dir ( qw( /dev/shm /run/shm /run /tmp ) ) {
-			if ( -d $str_dir && -w $str_dir ) {
-				$obj_self->{_str_path}		= qq{$str_dir/IPC__LockTicket-Shm_$obj_self->{_str_path}};
-				$bol_working_found		= true;
+		foreach my $str_Dir ( qw( /dev/shm /run/shm /run /tmp ) ) {
+			if ( -d $str_Dir
+			&& -w $str_Dir ) {
+				$obj_self->{_uri_Path}		= qq{$str_Dir/IPC__LockTicket-Shm_$obj_self->{_uri_Path}};
+				$bol_WorkingDirFound		= true;
 				last(test_dir);
 				}
 			}
 
 		# Stop if no fitting dir was found
-		if ( ! $bol_working_found ) {
-			my $str_caller	= (caller(0))[0];
-			croak qq{$str_caller(): Can't find any suitable directory\nIs this a systemd *NIX?\n};
+		if ( ! $bol_WorkingDirFound ) {
+			my $str_Caller	= (caller(0))[0];
+			croak qq{$str_Caller(): Can't find any suitable directory\nIs this a systemd *NIX?\n};
 			}
 		}
 
-	if ( &_check($obj_self) ) {
-		bless($obj_self, $str_class);
+	if ( &_Check($obj_self) ) {
+		bless($obj_self, $str_Class);
 		push(@obj_EndSelf, $obj_self);
 		return($obj_self);
 		}
@@ -286,226 +293,236 @@ sub new {
 	return(undef);
 	}
 
-# Similar to main_unlock, but without blocking tokens
+# Similar to MainUnlock, but without blocking tokens
 sub DESTROY {
 	my $obj_self		= shift;
 
 	# Only remove PID / lock file if the requesting process has created it
-	if ( -e $obj_self->{_str_path} && grep { $$ == $_ } $obj_self->_get_pids() ) {
+	if ( -e $obj_self->{_uri_Path}
+	&& grep { $$ == $_ } $obj_self->_GetPIDs() ) {
 
-		# Obsolete, doing the same as main_unlock() while we already have a function for this purpose
-		my @int_pids	= do {
+		# Obsolete, doing the same as MainUnlock() while we already have a function for this purpose
+		my @int_PIDs	= do {
 			local $SIG{CLD}		= q{IGNORE};
 			local $SIG{CHLD}	= q{IGNORE};
 
-			grep { kill(0 => $_) } grep { $_ != $$ } $obj_self->_get_pids();
+			grep { kill(0 => $_) } grep { $_ != $$ } $obj_self->_GetPIDs();
 			};
 		# Get running PIDs from lock file which are not the current process
 		# to check if this process is the last one.
 
 		# If there are other processes running
-		if ( @int_pids && $obj_self->_multiple_allowed() && open(my $fh, "<", $obj_self->{_str_path}) ) {
+		if ( @int_PIDs
+		&& $obj_self->_MultipleAllowed()
+		&& open(my $fh, "<", $obj_self->{_uri_Path}) ) {
 			flock($fh, 2);
 
-			$obj_self->{_har_data}	= retrieve($obj_self->{_str_path});
+			$obj_self->{_har_Data}	= retrieve($obj_self->{_uri_Path});
 
 			# Calculate new data - this is needed, because flock() might have delayed the former request
-			$obj_self->{_har_data}->{are_pids}	= [ do {
+			$obj_self->{_har_Data}->{are_PIDs}	= [ do {
 				local $SIG{CLD}			= q{IGNORE};
 				local $SIG{CHLD}		= q{IGNORE};
 
-				grep { kill(0 => $_) } grep { $_ != $$ } @{$obj_self->{_har_data}->{are_pids}};
+				grep { kill(0 => $_) } grep { $_ != $$ } @{$obj_self->{_har_Data}->{are_PIDs}};
 				} ];
 
-			store($obj_self->{_har_data}, $obj_self->{_str_path});
+			store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 
-			my $str_caller	= (caller(0))[3];
-			close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+			my $str_Caller	= (caller(0))[3];
+			close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 
 			# If we exited as last process we now can delete the file
-			if ( ! @{$obj_self->{_har_data}->{are_pids}} ) {
-				unlink($obj_self->{_str_path});
+			if ( ! @{$obj_self->{_har_Data}->{are_PIDs}} ) {
+				unlink($obj_self->{_uri_Path});
 				}
 			}
 		# If we are the last exiting process
 		else {
-			unlink($obj_self->{_str_path});
+			unlink($obj_self->{_uri_Path});
 			}
 		}
 
 	return(true);
 	}
 
-sub _check {
+sub _Check {
 	my $obj_self		= shift;
-	my $str_errors		= '';
+	my $str_Errors		= '';
 
-	if ( $obj_self->{_str_path} && -s $obj_self->{_str_path} && open(my $fh, "<", $obj_self->{_str_path}) ) {
+	if ( $obj_self->{_uri_Path}
+	&& -s $obj_self->{_uri_Path}
+	&& open(my $fh, "<", $obj_self->{_uri_Path}) ) {
 		flock($fh, 2);
 
 		# Test if file is readable
 		try {
-			retrieve($obj_self->{_str_path})
+			retrieve($obj_self->{_uri_Path})
 			}
 		catch ($str_Error) {
-			$str_errors	.= qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
+			$str_Errors	.= qq{"$obj_self->{_uri_Path}": Mailformed shared memory file.\n$str_Error\n};
 			}
 
-		my $str_caller	= (caller(0))[3];
-		close($fh) or $str_errors .= qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+		my $str_Caller	= (caller(0))[3];
+		close($fh) or $str_Errors .= qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 		}
 	# User failure
-	elsif ( ! $obj_self->{_str_path} ) {
-		my $str_caller	= (caller(0))[3];
-		$str_errors		.= qq{$str_caller(): Missing argument!\n};
+	elsif ( ! $obj_self->{_uri_Path} ) {
+		my $str_Caller	= (caller(0))[3];
+		$str_Errors		.= qq{$str_Caller(): Missing argument!\n};
 		}
 	# If open() failes
-	elsif ( -s $obj_self->{_str_path} ) {
-		my $str_caller	= (caller(0))[3];
-		$str_errors		.= qq{$str_caller(): Unable to open "$obj_self->{_str_path}"!\n};
+	elsif ( -s $obj_self->{_uri_Path} ) {
+		my $str_Caller	= (caller(0))[3];
+		$str_Errors		.= qq{$str_Caller(): Unable to open "$obj_self->{_uri_Path}"!\n};
 		}
 
 	# Some more fine tuning
-	if ( $obj_self->{_str_path} && -d $obj_self->{_str_path} ) {
-		$str_errors	.= qq{"$obj_self->{_str_path}": A folder can't be a share memory file!\n};
+	if ( $obj_self->{_uri_Path}
+	&& -d $obj_self->{_uri_Path} ) {
+		$str_Errors	.= qq{"$obj_self->{_uri_Path}": A folder can't be a share memory file!\n};
 		}
-	if ( $obj_self->{_str_path} !~ m{^\.?\.?/.+$} ) {
-		$str_errors	.= qq{"$obj_self->{_str_path}": is an inadequate path or name!\n};
+	if ( $obj_self->{_uri_Path} !~ m{^\.?\.?/.+$} ) {
+		$str_Errors	.= qq{"$obj_self->{_uri_Path}": is an inadequate path or name!\n};
 		}
 
 	# Protect file if not set other wise
-	if ( ! defined($obj_self->{_int_permission}) ) {
-		$obj_self->{_int_permission}	= 0600;
+	if ( ! defined($obj_self->{_int_Permission}) ) {
+		$obj_self->{_int_Permission}	= 0600;
 		}
 
 	# Check permissions
-	if ( -e $obj_self->{_str_path} && ! -r $obj_self->{_str_path} ) {
-		$str_errors	.= qq{"$obj_self->{_str_path}": No read permission.\n};
+	if ( -e $obj_self->{_uri_Path}
+	&& ! -r $obj_self->{_uri_Path} ) {
+		$str_Errors	.= qq{"$obj_self->{_uri_Path}": No read permission.\n};
 		}
-	if ( -e $obj_self->{_str_path} && ! -w $obj_self->{_str_path} ) {
-		$str_errors	.= qq{"$obj_self->{_str_path}": No write permission.\n};
+	if ( -e $obj_self->{_uri_Path}
+	&& ! -w $obj_self->{_uri_Path} ) {
+		$str_Errors	.= qq{"$obj_self->{_uri_Path}": No write permission.\n};
 		}
 
-	if ( $str_errors ) {
-		croak $str_errors;
+	if ( $str_Errors ) {
+		croak $str_Errors;
 		}
 
 	return(true);
 	}
 
 # Returns an array of integers which represents all registered PIDs of current lock file
-sub _get_pids {
+sub _GetPIDs {
 	my $obj_self		= shift;
 
 	try {
-		$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+		$obj_self->{_har_Data}	= lock_retrieve($obj_self->{_uri_Path});
 		}
 	catch ($str_Error) {
-		carp qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
+		carp qq{"$obj_self->{_uri_Path}": Mailformed shared memory file.\n$str_Error\n};
 		return(undef);
 		}
 
-	return(@{$obj_self->{_har_data}->{are_pids}});
+	return(@{$obj_self->{_har_Data}->{are_PIDs}});
 	}
 
 # Save a array of integer
-sub _set_pids {
+sub _SetPIDs {
 	my $obj_self		= shift;
-	my @int_pids		= @_;
+	my @int_PIDs		= @_;
 
-	if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
+	if ( open(my $fh, "<", $obj_self->{_uri_Path}) ) {
 		flock($fh, 2);
 
-		$obj_self->{_har_data}			= retrieve($obj_self->{_str_path});
+		$obj_self->{_har_Data}			= retrieve($obj_self->{_uri_Path});
 
-		$obj_self->{_har_data}->{are_pids}	= [ @int_pids ];
+		$obj_self->{_har_Data}->{are_PIDs}	= [ @int_PIDs ];
 
-		store($obj_self->{_har_data}, $obj_self->{_str_path});
+		store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 
-		my $str_caller	= (caller(0))[3];
-		close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+		my $str_Caller	= (caller(0))[3];
+		close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 		}
 
 	return(true);
 	}
 
 # Returns boolean value
-sub _multiple_allowed {
+sub _MultipleAllowed {
 	my $obj_self		= shift;
 
 	try {
-		$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+		$obj_self->{_har_Data}	= lock_retrieve($obj_self->{_uri_Path});
 		}
 	catch ($str_Error) {
-		carp qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
+		carp qq{"$obj_self->{_uri_Path}": Mailformed shared memory file.\n$str_Error\n};
 		return(undef);
 		}
 
-	return($obj_self->{_har_data}->{bol_multiple});
+	return($obj_self->{_har_Data}->{bol_AllowMultiple});
 	}
 
 # Creates the lock file
-sub main_lock {
+sub MainLock {
 	my $obj_self		= shift;
-	my $bol_multiple	= shift;
+	my $bol_MultipleAllowed	= shift;
 
 	# If the file exists
-	if ( -e $obj_self->{_str_path} && $obj_self->_check() ) {	# Dies in _check if failed
+	if ( -e $obj_self->{_uri_Path}
+	&& $obj_self->_Check() ) {	# Dies in _Check if failed
 		# If multiple is allowed we register our PID
-		if ( $bol_multiple && $obj_self->_multiple_allowed() ) {
-			$obj_self->token_lock();
+		if ( $bol_MultipleAllowed
+		&& $obj_self->_MultipleAllowed() ) {
+			$obj_self->TokenLock();
 
-			my @int_pids	= $obj_self->_get_pids();
+			my @int_PIDs	= $obj_self->_GetPIDs();
 
-			if ( grep { $_ == $$ } @int_pids ) {
-				carp qq{WARNING: Same process tried to main_lock() again.\n};
-				$obj_self->token_unlock();
+			if ( grep { $_ == $$ } @int_PIDs ) {
+				carp qq{WARNING: Same process tried to MainLock() again.\n};
+				$obj_self->TokenUnlock();
 				return(false);
 				}
 			else {
-				$obj_self->_set_pids( @int_pids, $$ );
+				$obj_self->_SetPIDs( @int_PIDs, $$ );
 				}
 
-			$obj_self->token_unlock();
+			$obj_self->TokenUnlock();
 			return(true);
 			}
 		# Or it must be exclusive
 		else {
-			$obj_self->token_lock();
-			my @int_pids	  	= $obj_self->_get_pids();
+			$obj_self->TokenLock();
+			my @int_PIDs	  	= $obj_self->_GetPIDs();
 
 			local $SIG{CLD} 	= q{IGNORE};
 			local $SIG{CHLD}	= q{IGNORE};
 
 			# Did we lock up?
-			if ( grep { $$ == $_ } @int_pids ) {
-				carp qq{WARNING: Same process tried to main_lock() again.\n};
-				$obj_self->token_unlock();
+			if ( grep { $$ == $_ } @int_PIDs ) {
+				carp qq{WARNING: Same process tried to MainLock() again.\n};
+				$obj_self->TokenUnlock();
 				return(false);
 				}
 			# There are processes running on this lock file
-			elsif ( grep { kill(0 => $_) } @int_pids ) {
-				$obj_self->token_unlock();
+			elsif ( grep { kill(0 => $_) } @int_PIDs ) {
+				$obj_self->TokenUnlock();
 				return(false);
 				}
 			else {
-				carp qq{ERROR: Was the former instance not exited porperly?\nOrphan lock file found: "$obj_self->{_str_path}".};
+				carp qq{ERROR: Was the former instance not exited porperly?\nOrphan lock file found: "$obj_self->{_uri_Path}".};
 				return(false);
 				}
 			}
 		}
 	# Create file and write our format
-	elsif ( ! -e $obj_self->{_str_path} ) {
-		if ( open(my $fh, ">", $obj_self->{_str_path}) ) {
+	elsif ( ! -e $obj_self->{_uri_Path} ) {
+		if ( open(my $fh, ">", $obj_self->{_uri_Path}) ) {
 			close($fh);
 
-			chmod($obj_self->{_int_permission}, $obj_self->{_str_path});
+			chmod($obj_self->{_int_Permission}, $obj_self->{_uri_Path});
 
-			$obj_self->{_har_data}->{bol_multiple}		= ( $bol_multiple ) ? true : false;
-			$obj_self->{pid_parent}				= $$;
-			push(@{$obj_self->{_har_data}->{are_pids}}, $$);
+			$obj_self->{_har_Data}->{bol_AllowMultiple}		= ( $bol_MultipleAllowed ) ? true : false;
+			$obj_self->{_pid_Parent}				= $$;
+			push(@{$obj_self->{_har_Data}->{are_PIDs}}, $$);
 
-			lock_store($obj_self->{_har_data}, $obj_self->{_str_path});
+			lock_store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 			}
 		else {
 			return(false);
@@ -519,88 +536,92 @@ sub main_lock {
 	}
 
 # Removes lock file or the PID from those
-sub main_unlock {
+sub MainUnlock {
 	my $obj_self		= shift;
 
-	if ( ! -e $obj_self->{_str_path} ) {
-		my $str_caller	= (caller(0))[3];
-		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+	if ( ! -e $obj_self->{_uri_Path} ) {
+		my $str_Caller	= (caller(0))[3];
+		croak qq{$str_Caller(): Lock file missing\nHave you ever called MainLock() ?\n};
 		}
 
-	if ( $obj_self->_multiple_allowed() ) {
-		my @int_pids	= ();
+	if ( $obj_self->_MultipleAllowed() ) {
+		my @int_PIDs	= ();
 
-		$obj_self->token_lock();
+		$obj_self->TokenLock();
 
-		@int_pids	= do {
+		@int_PIDs	= do {
 			local $SIG{CLD}		= q{IGNORE};
 			local $SIG{CHLD}	= q{IGNORE};
 
-			grep { kill(0 => $_) } grep { $_ != $$ } $obj_self->_get_pids();
+			grep { kill(0 => $_) } grep { $_ != $$ } $obj_self->_GetPIDs();
 			};
 
-		if ( @int_pids ) {
-			$obj_self->_set_pids(@int_pids);
-			$obj_self->token_unlock();
+		if ( @int_PIDs ) {
+			$obj_self->_SetPIDs(@int_PIDs);
+			$obj_self->TokenUnlock();
 			}
 		else {
-			unlink($obj_self->{_str_path});
+			unlink($obj_self->{_uri_Path});
 			}
 
 		}
 	else {
-		unlink($obj_self->{_str_path});
+		unlink($obj_self->{_uri_Path});
 		}
 
 	return(true);
 	}
 
-sub _clean_agents_list (\@) {
+sub _CleanAgentsList (\@) {
 	my $are_list		= shift;
 
 	local $SIG{CLD}		= q{IGNORE};
 	local $SIG{CHLD}	= q{IGNORE};
 
-	return(grep { kill(0 => $_->{pid_parent}) && ( $_->{pid_agent} == $$ || kill(0 => $_->{pid_agent}) ) } @{$are_list});
+	return(grep { kill(0 => $_->{_pid_Parent}) && ( $_->{_pid_Agent} == $$ || kill(0 => $_->{_pid_Agent}) ) } @{$are_list});
 	}
 
 # Integrated lock system
-sub token_lock {
+sub TokenLock {
 	my $obj_self		= shift;
-	my $bol_init		= true;
+	my $bol_Init		= true;
 
-	if ( ! -e $obj_self->{_str_path} ) {
-		my $str_caller	= (caller(0))[3];
-		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+	if ( ! -e $obj_self->{_uri_Path} ) {
+		my $str_Caller	= (caller(0))[3];
+		croak qq{$str_Caller(): Lock file missing\nHave you ever called MainLock() ?\n};
 		}
 
 	while ( true ) {
-		if ( -e $obj_self->{_str_path} && open(my $fh, "<", $obj_self->{_str_path}) ) {
+		if ( -e $obj_self->{_uri_Path}
+		&& open(my $fh, "<", $obj_self->{_uri_Path}) ) {
 			flock($fh, 2);
-			my $str_caller				= (caller(0))[3];
+			my $str_Caller				= (caller(0))[3];
 
 			# Load current data
-			$obj_self->{_har_data}			= retrieve($obj_self->{_str_path});
+			$obj_self->{_har_Data}			= retrieve($obj_self->{_uri_Path});
 
-			@{$obj_self->{_har_data}->{are_token}}	= _clean_agents_list(@{$obj_self->{_har_data}->{are_token}});
+			@{$obj_self->{_har_Data}->{are_Token}}	= _CleanAgentsList(@{$obj_self->{_har_Data}->{are_Token}});
 
 			# If we never got a token, we request one
-			if ( $bol_init && ! first { $_->{pid_agent} == $$ } @{$obj_self->{_har_data}->{are_token}} ) {
-				$bol_init	= false;
-				push(@{$obj_self->{_har_data}->{are_token}}, { pid_agent => $$, pid_parent => $obj_self->{pid_parent} });
+			if ( $bol_Init
+			&& ! first { $_->{_pid_Agent} == $$ } @{$obj_self->{_har_Data}->{are_Token}} ) {
+				$bol_Init	= false;
+				push(@{$obj_self->{_har_Data}->{are_Token}}, { _pid_Agent => $$, _pid_Parent => $obj_self->{_pid_Parent} });
 				}
-			elsif ( ! -e $obj_self->{_str_path} || ( ! $bol_init && ! first { $_->{pid_parent} == $obj_self->{pid_parent} } @{$obj_self->{_har_data}->{are_token}} ) ) {
+			elsif ( ! -e $obj_self->{_uri_Path}
+			|| ( ! $bol_Init
+			&& ! first { $_->{_pid_Parent} == $obj_self->{_pid_Parent} } @{$obj_self->{_har_Data}->{are_Token}} ) ) {
 				# Parent exited (and maybe we weren't informed to exit)
-				close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+				close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 				exit(120);
 				}
 
-			store($obj_self->{_har_data}, $obj_self->{_str_path});
+			store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 
-			close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+			close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 
 			# Check if it's our turn
-			if ( $obj_self->{_har_data}->{are_token}->[0]->{pid_agent} == $$ ) {
+			if ( $obj_self->{_har_Data}->{are_Token}->[0]->{_pid_Agent} == $$ ) {
 				return(true);
 				}
 			# If it isn't our turn wait
@@ -608,108 +629,125 @@ sub token_lock {
 				Time::HiRes::sleep(0.01);	# Needed to prevent permanent spamming on CPU and FS
 				}
 			}
-		elsif ( ! -e $obj_self->{_str_path} ) {
+		elsif ( ! -e $obj_self->{_uri_Path} ) {
 			# Parent exited (and maybe we weren't informed to exit)
 			exit(120);
 			}
 		}
 	}
 
-sub token_unlock {
+sub TokenUnlock {
 	my $obj_self		= shift;
-	my $int_removed		= undef;
+	my $int_RemovedToken	= undef;
 
-	if ( ! -e $obj_self->{_str_path} ) {
-		my $str_caller	= (caller(0))[3];
-		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+	if ( ! -e $obj_self->{_uri_Path} ) {
+		my $str_Caller	= (caller(0))[3];
+		croak qq{$str_Caller(): Lock file missing\nHave you ever called MainLock() ?\n};
 		}
 
-	if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
+	if ( open(my $fh, "<", $obj_self->{_uri_Path}) ) {
 		flock($fh, 2);
 
-		$obj_self->{_har_data}			= retrieve($obj_self->{_str_path});
+		$obj_self->{_har_Data}			= retrieve($obj_self->{_uri_Path});
 
-		@{$obj_self->{_har_data}->{are_token}}	= _clean_agents_list(@{$obj_self->{_har_data}->{are_token}});
-		$int_removed				= shift(@{$obj_self->{_har_data}->{are_token}});
-		store($obj_self->{_har_data}, $obj_self->{_str_path});
+		@{$obj_self->{_har_Data}->{are_Token}}	= _CleanAgentsList(@{$obj_self->{_har_Data}->{are_Token}});
+		$int_RemovedToken			= shift(@{$obj_self->{_har_Data}->{are_Token}});
+		store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 
-		my $str_caller				= (caller(0))[3];
-		if ( $int_removed->{pid_agent} != $$ ) {
-			carp qq{$str_caller(): Removed PID $int_removed->{pid_agent} while running under PID $$ (should be the same)\n};
+		my $str_Caller				= (caller(0))[3];
+		if ( $int_RemovedToken->{_pid_Agent} != $$ ) {
+			carp qq{$str_Caller(): Removed PID $int_RemovedToken->{_pid_Agent} while running under PID $$ (should be the same)\n};
 			}
-		close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+		close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 		}
 	}
 
 # Allows transporting developers data between processes (custom IPC)
-sub set_custom_data {
+sub SetCustomData {
 	my $obj_self		= shift;
-	my $ref_data		= shift;
+	my $ref_Data		= shift;
 
-	if ( ! -e $obj_self->{_str_path} ) {
-		my $str_caller	= (caller(0))[3];
-		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+	if ( ! -e $obj_self->{_uri_Path} ) {
+		my $str_Caller	= (caller(0))[3];
+		croak qq{$str_Caller(): Lock file missing\nHave you ever called MainLock() ?\n};
 		}
 
-	if ( !( ref($ref_data) || ! defined($ref_data) ) ) {
-		my $str_caller	= (caller(0))[3];
-		croak qq{$str_caller(): ref_data=:"$ref_data" is not a reference nor NULL\n};
+	if ( !( ref($ref_Data)
+	|| ! defined($ref_Data) ) ) {
+		my $str_Caller	= (caller(0))[3];
+		croak qq{$str_Caller(): ref_Data=:"$ref_Data" is not a reference nor NULL\n};
 		}
 
-	if ( open(my $fh, "<", $obj_self->{_str_path}) ) {
+	if ( open(my $fh, "<", $obj_self->{_uri_Path}) ) {
 		flock($fh, 2);
 
-		$obj_self->{_har_data}		= retrieve($obj_self->{_str_path});
+		$obj_self->{_har_Data}		= retrieve($obj_self->{_uri_Path});
 
-		if ( ref($ref_data) eq q{ARRAY} ) {
-			$obj_self->{_har_data}->{ref_cust_data}	= [ @{$ref_data} ];
+		if ( ref($ref_Data) eq q{ARRAY} ) {
+			$obj_self->{_har_Data}->{ref_CustomData}	= [ @{$ref_Data} ];
 			}
-		elsif ( ref($ref_data) eq q{HASH} ) {
-			$obj_self->{_har_data}->{ref_cust_data}	= { %{$ref_data} };
+		elsif ( ref($ref_Data) eq q{HASH} ) {
+			$obj_self->{_har_Data}->{ref_CustomData}	= { %{$ref_Data} };
 			}
-		elsif ( ref($ref_data) eq q{SCALAR} ) {
-			$obj_self->{_har_data}->{ref_cust_data}	= ${$ref_data} . "";
+		elsif ( ref($ref_Data) eq q{SCALAR} ) {
+			$obj_self->{_har_Data}->{ref_CustomData}	= ${$ref_Data} . "";
 			}
-		elsif ( ref($ref_data) eq q{CODE} ) {
-			$obj_self->{_har_data}->{ref_cust_data}	= $ref_data;
+		elsif ( ref($ref_Data) eq q{CODE} ) {
+			$obj_self->{_har_Data}->{ref_CustomData}	= $ref_Data;
 			}
 		else {  # Undef undef
-			$obj_self->{_har_data}->{ref_cust_data}	= undef;
+			$obj_self->{_har_Data}->{ref_CustomData}	= undef;
 			}
 
-		store($obj_self->{_har_data}, $obj_self->{_str_path});
+		store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 
-		my $str_caller	= (caller(0))[3];
-		close($fh) or die qq{$str_caller(): Unable to close "$obj_self->{_str_path}" properly\n};
+		my $str_Caller	= (caller(0))[3];
+		close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 		}
 
 	return(true);
 	}
 
 # Allows transporting developers data between processes (custom IPC)
-sub get_custom_data {
+sub GetCustomData {
 	my $obj_self		= shift;
 
-	if ( ! -e $obj_self->{_str_path} ) {
-		my $str_caller	= (caller(0))[3];
-		croak qq{$str_caller(): Lock file missing\nHave you ever called main_lock() ?\n};
+	if ( ! -e $obj_self->{_uri_Path} ) {
+		my $str_Caller	= (caller(0))[3];
+		croak qq{$str_Caller(): Lock file missing\nHave you ever called MainLock() ?\n};
 		}
 
 	try {
-		$obj_self->{_har_data}	= lock_retrieve($obj_self->{_str_path});
+		$obj_self->{_har_Data}	= lock_retrieve($obj_self->{_uri_Path});
 		}
 	catch ($str_Error) {
-		carp qq{"$obj_self->{_str_path}": Mailformed shared memory file.\n$str_Error\n};
+		carp qq{"$obj_self->{_uri_Path}": Mailformed shared memory file.\n$str_Error\n};
 		return(undef);
 		}
 
-	return($obj_self->{_har_data}->{ref_cust_data});
+	return($obj_self->{_har_Data}->{ref_CustomData});
 	}
 
-sub end_procedure {
+sub _EndProcedure {
 	foreach my $obj_self ( @obj_EndSelf ) {
 		&DESTROY($obj_self);
 		}
 	}
+
+##### C O M P A T I B I L I T Y  L A Y E R #####
+
+sub _Deprecated {
+	my $str_Caller		= shift;
+	
+	carp qq{Function $str_Caller is depricated and going to be removed.\n};
+	}
+
+sub new			{ _Deprecated((caller(0))[3]); goto &New; };
+sub main_lock		{ _Deprecated((caller(0))[3]); goto &MainLock; };
+sub main_unlock		{ _Deprecated((caller(0))[3]); goto &MainUnlock; };
+sub token_lock		{ _Deprecated((caller(0))[3]); goto &TokenLock; };
+sub token_unlock	{ _Deprecated((caller(0))[3]); goto &TokenUnlock; };
+sub set_custom_data	{ _Deprecated((caller(0))[3]); goto &SetCustomData; };
+sub get_custom_data	{ _Deprecated((caller(0))[3]); goto &GetCustomData; };
 
 1;
