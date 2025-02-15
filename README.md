@@ -14,6 +14,9 @@ This is not a fifo nor TCP pipe implementation.
 With version 2.8 much things were renamed. Tests must be run be-
 fore finally integrating it. Things will work as before, but
 using the the old functions will throw warnings.
+With version 2.9 the formerly named functions were removed and
+only the new will be available.
+Exception: new() is a synonym for New().
 
 ## INSTALLATION
 Run `perl -V:installsitelib` and take the path returned for the

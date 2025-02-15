@@ -223,7 +223,7 @@ use builtin qw(true false);
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.8};
+	our $VERSION	= q{2.9};
 	}
 
 END {
@@ -242,6 +242,7 @@ my @obj_EndSelf		= ();
 
 ##### M E T H O D S #####
 
+sub new { goto &New; } # Keep regular naming for Perl objects
 sub New {
 	my $str_Class		= shift;
 	my $obj_self	= {
@@ -269,6 +270,7 @@ sub New {
 		# Find a fitting directory
 		test_dir:
 		foreach my $str_Dir ( qw( /dev/shm /run/shm /run /tmp ) ) {
+# WORK This is for Linux. Where shall this located on FreeBSD?
 			if ( -d $str_Dir
 			&& -w $str_Dir ) {
 				$obj_self->{_uri_Path}		= qq{$str_Dir/IPC__LockTicket-Shm_$obj_self->{_uri_Path}};
@@ -733,21 +735,5 @@ sub _EndProcedure {
 		&DESTROY($obj_self);
 		}
 	}
-
-##### C O M P A T I B I L I T Y  L A Y E R #####
-
-sub _Deprecated {
-	my $str_Caller		= shift;
-	
-	carp qq{Function $str_Caller is depricated and going to be removed.\n};
-	}
-
-sub new			{ _Deprecated((caller(0))[3]); goto &New; };
-sub main_lock		{ _Deprecated((caller(0))[3]); goto &MainLock; };
-sub main_unlock		{ _Deprecated((caller(0))[3]); goto &MainUnlock; };
-sub token_lock		{ _Deprecated((caller(0))[3]); goto &TokenLock; };
-sub token_unlock	{ _Deprecated((caller(0))[3]); goto &TokenUnlock; };
-sub set_custom_data	{ _Deprecated((caller(0))[3]); goto &SetCustomData; };
-sub get_custom_data	{ _Deprecated((caller(0))[3]); goto &GetCustomData; };
 
 1;
