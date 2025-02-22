@@ -1,5 +1,7 @@
 #!/usr/bin/env perl
 
+package IPC::LockTicket;
+
 use strict;
 use warnings;
 use feature qw(fc);
@@ -64,16 +66,16 @@ sub GetMounts {
 
 if ( ! grep { fc($^O) eq fc($_) } qw(FreeBSD Linux) ) {
 	print STDERR qq{Not working on $^O.\n};
-	exit(1);
+	return(false);
 	}
 
 if ( ! defined( $ENV{USER} // $ENV{LOGNAME} ) ) {
 	print STDERR qq{Can't distinguish user name.\n};
-	exit(2);
+	return(false);
 	}
 elsif ( ( $ENV{USER} // $ENV{LOGNAME} ) eq q{root} ) {
 	print STDERR qq{Running this test as 'root' would show false results.\n};
-	exit(3);
+	return(false);
 	}
 
 $are_Mounts		= GetMounts() or die qq{Got no mounts.\n};
@@ -86,12 +88,12 @@ if ( ! defined($har_FirstMount) ) {
 		. ( ( fc($^O) eq fc(q(FreeBSD)) ) ? qq{At least /run is required, preferred mounted on tmpfs, writable to all users.\n} : '' )
 		. qq{Any of these directories are appropriate:\n}
 		. join('', map { qq{  $_\n} } @uri_Accord );
-	exit(1);
+	return(false);
 	}
 
 if ( ! -w $har_FirstMount->{uri_MountPoint} ) {
 	print STDERR qq{Directory "$har_FirstMount->{uri_MountPoint}" is not writable.\n};
-	exit(1);
+	return(false);
 	}
 
 print qq{Default caching direcotry will usually be "$har_FirstMount->{uri_MountPoint}" on this system.\n};
@@ -100,4 +102,4 @@ if ( $har_FirstMount->{str_FileSystem} !~ m{$rxp_TempFS} ) {
 	print qq{(It is not a tmpfs, so IPC may be slow.)\n};
 	}
 
-exit(0);
+return(true);
