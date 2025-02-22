@@ -3,3 +3,4 @@ LICENSE
 Makefile.PL
 MANIFEST
 README.md
+tests/tmpfs.pl

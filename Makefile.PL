@@ -11,7 +11,7 @@ WriteMakefile(
 	AUTHOR		=> q{Dominik Bernhardt <domasprogrammer@gmail.com>},
 	LICENSE		=> q{freebsd}, # BSD-2-Clause
 	MIN_PERL_VERSION => q{5.040001},
-	test		=> {B
-		TESTS	=> q{tests/*.pl},
-		}
+	#test		=> {
+		#TESTS	=> q{tests/*.pl},
+		#},
 	);

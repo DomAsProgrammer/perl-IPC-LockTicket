@@ -18,6 +18,13 @@ With version 2.9 the formerly named functions were removed and
 only the new will be available.
 Exception: new() is a synonym for New().
 
+## TESTING
+While the test script itself does exaclty, what I've expected to
+do, it's not not working for the test procedure offered through
+Makefile.PL .
+Run manually, if you encouter issues or if you want to proove
+the library will work.
+
 ## INSTALLATION
 Run `perl -V:installsitelib` and take the path returned for the
 location to save LockTicket.pm therefore. In theory the path
