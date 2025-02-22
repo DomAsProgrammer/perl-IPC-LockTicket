@@ -38,7 +38,7 @@ Any required libraries are usually part of the default Perl in-
 stallation of version 5.40.0 .
 
 ## HOW TO <a name="howto"></a>
-[See at GitHub-Wiki.](https://github.com/DomAsProgrammer/perl-IPC-LockTicket/wiki/How-to)
+[See at GitHub-Wiki.](https://github.com/DomAsProgrammer/perl-IPC-LockTicket/wiki)
 
 ## WHY THIS LIBRARY EXISTS
 It shall leave the semaphores alone, which are e.g. used by
