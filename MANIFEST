@@ -1,5 +1,5 @@
-Makefile.PL
 lib/IPC/LockTicket.pm
 LICENSE
+Makefile.PL
 MANIFEST
 README.md
