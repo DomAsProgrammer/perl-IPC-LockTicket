@@ -6,7 +6,8 @@
 
 	License:		BSD-2-Clause
 	Program-version:	<see below>
-	Description:		Libriary for IPC and token based lock mechanism.
+	Description:		Libriary for IPC and token based
+				lock mechanism.
 	Contact:		Dominik Bernhardt - domasprogrammer@gmail.com or https://github.com/DomAsProgrammer
 
 =end meta_information
@@ -16,28 +17,34 @@
 	Transport data between applications (IPC) via Storable library
 	Copyright © 2025 Dominik Bernhardt
 
-	Redistribution and use in source and binary forms, with or without
-	modification, are permitted provided that the following conditions are
-	met:
+	Redistribution and use in source and binary
+	forms, with or without modification, are permitted
+	provided that the following conditions are met:
 
-	1. Redistributions of source code must retain the above copyright
-	notice, this list of conditions and the following disclaimer.
+	1. Redistributions of source code must retain the
+	above copyright notice, this list of conditions and the
+	following disclaimer.
 
-	2. Redistributions in binary form must reproduce the above copyright
-	notice, this list of conditions and the following disclaimer in the
-	documentation and/or other materials provided with the distribution.
+	2. Redistributions in binary form must reproduce
+	the above copyright notice, this list of conditions and
+	the following disclaimer in the documentation and/or
+	other materials provided with the distribution.
 
-	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS
-	IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-	TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-	PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-	HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
-	TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-	PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-	LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-	NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+	HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR
+	IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+	PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+	COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY
+	DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+	CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+	PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+	DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+	CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+	CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+	OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+	DAMAGE.
 
 =end license
 
@@ -100,46 +107,50 @@
 	v1.6.3.1
 	Added coments
 
-	v2.0
+	v2.00
 	Significant changes!
 	Renamed
 	Now working with a FIFO array, but nothing should change
 	for the lib user.
 
-	v2.1
+	v2.01
 	Some bugfixes.
 
-	v2.2
+	v2.02
 	Implemented Carp and Exporter.
 	Declared version.
 
-	v2.3
+	v2.03
 	Used END block to properly end the program.
 
-	v2.4
+	v2.04
 	Switched to Perl v5.40.0, removed Try and replaced by
 	feature q{try}
 
-	v2.5
+	v2.05
 	Perl v5.40.0 also supports boolean values nativly.
 	Removed boolean and used builtin's true and false.
 
-	v2.6
+	v2.06
 	Bugfix of lock_retrieve() on scrambled files.
 
-	v2.7
+	v2.07
 	Detection and warning of orphan lock files.
 
-	v2.8
+	v2.08
 	New terminology
 	Compatibility layer
 
-	v2.9
+	v2.09
 	Removed compatibility layer
 
 	v2.10
-	New dependency for FreeBSD: /run as tmpfs
+	New dependency for FreeBSD: /run as tmpfs in testing
 	Full fledged pod.
+
+	v2.10.01
+	Bugfix: Dynamic lock file target mode is now case
+	sensetive agian.
 
 =end version_history
 
@@ -288,7 +299,7 @@ use builtin qw(true false);
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.10};
+	our $VERSION	= q{2.11};
 	}
 
 END {
@@ -330,7 +341,8 @@ my $rxp_MountBSD	= qr{^
 	\s*\)\s*	# literal braket
 	$}xx;
 my $rxp_Accord		= ( fc($^O) eq fc(q(FreeBSD)) ) ? $rxp_MountBSD : $rxp_MountLinux;
-my $rxp_GoodPath	= qr{^[-_a-z0-9]{1,218}$};
+my $rxp_GoodPath	= qr{^[-_a-z0-9]{1,218}$}i;
+my $rxp_FullPath	= qr{^\.?\.?/.+$};
 
 ##### M E T H O D S #####
 
@@ -346,7 +358,7 @@ Creates a new IPC::LockTicket object which is returned. Returns undef on failure
 
 =item name
 
-String just matching m{^[-_a-z0-9]+$} for dynamic naming or a full path to a file.
+String just matching m{^[-_a-z0-9]+$}i for dynamic naming or a full path to a file.
 Mandatory.
 
 =item permission
@@ -526,7 +538,7 @@ sub _Check {
 
 	if ( $obj_self->{_uri_Path}
 	&& -s $obj_self->{_uri_Path}
-	&& open(my $fh, "<", $obj_self->{_uri_Path}) ) {
+	&& open(my $fh, '<', $obj_self->{_uri_Path}) ) {
 		flock($fh, 2);
 
 		# Test if file is readable
@@ -556,7 +568,7 @@ sub _Check {
 	&& -d $obj_self->{_uri_Path} ) {
 		$str_Errors	.= qq{"$obj_self->{_uri_Path}": A folder can't be a share memory file!\n};
 		}
-	if ( $obj_self->{_uri_Path} !~ m{^\.?\.?/.+$} ) {
+	if ( $obj_self->{_uri_Path} !~ m{$rxp_FullPath} ) {
 		$str_Errors	.= qq{"$obj_self->{_uri_Path}": is an inadequate path or name!\n};
 		}
 
