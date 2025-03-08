@@ -152,6 +152,12 @@
 	Bugfix: Dynamic lock file target mode is now case
 	sensetive agian.
 
+	v2.11
+	Bugfixes
+
+	v2.12
+	Cares about lock file's permissions in detail.
+
 =end version_history
 
 =begin comment
@@ -296,10 +302,11 @@ use Carp;
 use Exporter;
 ### MetaCPAN
 use builtin qw(true false);
+use English qw( -no_match_vars );
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.11};
+	our $VERSION	= q{2.12};
 	}
 
 END {
@@ -343,6 +350,8 @@ my $rxp_MountBSD	= qr{^
 my $rxp_Accord		= ( fc($^O) eq fc(q(FreeBSD)) ) ? $rxp_MountBSD : $rxp_MountLinux;
 my $rxp_GoodPath	= qr{^[-_a-z0-9]{1,218}$}i;
 my $rxp_FullPath	= qr{^\.?\.?/.+$};
+my $rxp_Whitespaces	= qr{\s+};
+my $rxp_OctalNum	= qr{^\o{4}$};
 
 ##### M E T H O D S #####
 
@@ -358,14 +367,14 @@ Creates a new IPC::LockTicket object which is returned. Returns undef on failure
 
 =item name
 
-String just matching m{^[-_a-z0-9]+$}i for dynamic naming or a full path to a file.
+String just matching C<m{^[-_a-z0-9]+$}i> for dynamic naming or a full path to a file.
 Mandatory.
 
 =item permission
 
 Access rights which the lock file will have.
 For example if just a collission pretection shall be impelemented it might be the best to set it to 0666, so collissions can be prevented over the whole system for every user.
-Expects four digits, like L<chmod(1)>.
+Expects a octal number, like L<chmod(1)>.
 Defaults to C<0600>.
 
 =back
@@ -453,6 +462,15 @@ Destroys the object so it removes lock files or PIDs from lock files. Usually au
 # Similar to MainUnlock, but without blocking tokens
 sub DESTROY {
 	my $obj_self		= shift;
+
+	# Test if file is readable
+	try {
+		lock_retrieve($obj_self->{_uri_Path})
+		}
+	catch ($str_Error) {
+		# Not readable
+		return(true);
+		}
 
 	# Only remove PID / lock file if the requesting process has created it
 	if ( -e $obj_self->{_uri_Path}
@@ -573,7 +591,11 @@ sub _Check {
 		}
 
 	# Protect file if not set other wise
-	if ( ! defined($obj_self->{_oct_Permission}) ) {
+	if ( defined($obj_self->{_oct_Permission})
+	&& length(qq{$obj_self->{_oct_Permission}}) > 4 ) {
+		$str_Errors	.= sprintf(qq{"%04o": Invalid permission. Must be a octal number of four or NULL.\n}, $obj_self->{_oct_Permission});
+		}
+	elsif ( ! defined($obj_self->{_oct_Permission}) ) {
 		$obj_self->{_oct_Permission}	= 0600;
 		}
 
@@ -587,8 +609,78 @@ sub _Check {
 		$str_Errors	.= qq{"$obj_self->{_uri_Path}": No write permission.\n};
 		}
 
+	# What if permissions differ??
+	if ( -e $obj_self->{_uri_Path} ) {
+		my %mxd_FileStat	= ();
+		my @str_Parts		= qw(o g u ts);
+		my $str_Caller		= (caller(0))[3];
+		my %int_FilePerms	= ();	# user:users 0600
+		my @int_FileGrpsMbrs	= ();
+		my %int_ObjPerms	= ();	# root:root 0600
+		my $str_EUName		= (getpwuid($EUID))[0];
+		my @int_ObjGrps		= ( (getpwuid($EUID))[3] );
+		my $cnt_Position	= 0;
+		@mxd_FileStat{qw(dev ino mode nlink uid gid rdev size atime mtime ctime blksize blocks)} =
+			stat($obj_self->{_uri_Path});
+		%int_FilePerms		=
+			map { $str_Parts[$cnt_Position++] => $_ } #( $_ % 2 ) ? $_ - 1 : $_ }		# Execution bit is not required
+			reverse(split('', sprintf(q{%04o}, $mxd_FileStat{mode} & 07777)));
+		$cnt_Position		= 0;
+		%int_ObjPerms		=
+			map { $str_Parts[$cnt_Position++] => $_ } #( $_ % 2 ) ? $_ - 1 : $_ }		# Execution bit is not required
+			reverse(split('', sprintf(q{%04o}, $obj_self->{_oct_Permission})));
+		@int_FileGrpsMbrs	=		# Group's members
+			map { (getpwnam($_))[2] }	# UID
+			grep { defined && $_ ne '' }
+			split(m{$rxp_Whitespaces}, (getgrgid($mxd_FileStat{gid}))[3]);
+		push(@int_FileGrpsMbrs, 0);	# Root is part of any group
+
+		# If file owner's group is same as the file's group we need to add the user's name to the File Group Members list, in case it's the user's main group, which won't be shown by getent groups
+		while ( my(undef, undef, $int_UID, $int_GID) = getpwent() ) {
+
+			# Users' default groups
+			if ( $int_GID == $mxd_FileStat{gid} ) {	
+				push(@int_FileGrpsMbrs, $int_UID);
+				}
+			}
+
+		while ( my(undef, undef, $int_GID, $str_Members) = getgrent() ) {
+
+			# We need to know all real groups
+			if ( grep { $str_EUName eq $_ } split(m{$rxp_Whitespaces}, $str_Members) ) {
+				push(@int_ObjGrps, $int_GID);
+				}
+			}
+
+		if ( $int_FilePerms{o} > $int_ObjPerms{o}	# General rights are to high
+		|| $int_FilePerms{g} > $int_ObjPerms{g}		# General rights are to high
+
+		# File is not owned by user's real groups
+		||( !( grep { $mxd_FileStat{gid} == $_ } @int_ObjGrps )
+		&& $int_FilePerms{g} > $int_ObjPerms{o} )	# Foreign group has more rights as wanted for other users
+
+
+		# File is not owned effective user
+		||($mxd_FileStat{uid} != $EUID
+		&& (
+
+		## File owner is part of file owning group -> access can happen through group
+		#(grep { $mxd_FileStat{uid} == $_ } @int_FileGrpsMbrs	
+		#&& $int_FilePerms{g} > $int_ObjPerms{o} )
+		#
+		## File owner is not part of file owning group -> access happens only through owner
+		#||( !( grep { $mxd_FileStat{uid} == $_ } @int_FileGrpsMbrs )
+		( !( grep { $mxd_FileStat{uid} == $_ } @int_FileGrpsMbrs )
+		&& $int_FilePerms{u} > $int_ObjPerms{o} )
+
+		) ) ) {
+			$str_Errors	.= qq{Existing file "$obj_self->{_uri_Path}" has douptful permissions.\n};
+
+			}
+		}
+
 	if ( $str_Errors ) {
-		croak $str_Errors;
+		croak $str_Errors;	# die
 		}
 
 	return(true);
@@ -671,8 +763,6 @@ sub MainLock {
 	# If the file exists
 	if ( -e $obj_self->{_uri_Path}
 	&& $obj_self->_Check() ) {	# Dies in _Check if failed
-
-		# WORK What if permissions differ??
 
 		# If multiple is allowed we register our PID
 		if ( $bol_MultipleAllowed

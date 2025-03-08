@@ -129,8 +129,8 @@ else {
 	plan(tests => 3);
 	}
 
-ok(CheckOperatingSystem(), q{OS});
-ok(CheckTestUser(), q{Test User});
-ok(CheckGoodMountPoint(), q{Good Mount Point});
+ok(CheckOperatingSystem(),	q{OS});
+ok(CheckTestUser(),		q{Test User});
+ok(CheckGoodMountPoint(),	q{Good Mount Point});
 
 exit(0);
