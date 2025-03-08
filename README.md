@@ -3,7 +3,7 @@ Primary IPC lock mechanisms via lock files and tokens.
 Secondary it allows to transfer references (arrayref/hashref) between processes, but you should separate transfer files and lock files for the sake of the speed. However, never should it be used for huge data transfer, but for small pieces, e.g. the file path where you saved a file containing huge data. Or the identifier within the database table.
 
 ## WHAT THIS LIBRARY IS NOT FOR
-This is not a fifo nor TCP pipe implementation.
+This is not a fifo, socket, nor TCP pipe implementation.
 
 ## UPDATES
 With version 2.8 much things were renamed. Tests must be run before finally integrating it. Things will work as before, but using the the old functions will throw warnings.
