@@ -83,7 +83,7 @@
 
 	v1.4.1
 	Just some prettier output.
-	
+
 	v1.5
 	Renamed
 
@@ -157,6 +157,10 @@
 
 	v2.12
 	Cares about lock file's permissions in detail.
+
+	v2.13
+	Better handling if TokenUnlock() was called if TokenLock() was never called before.
+	Improved manual.
 
 =end version_history
 
@@ -244,33 +248,50 @@ package IPC::LockTicket;
 
 =head1 NAME
 
-IPC::LockTicket - Use Storable to IPC token to prevent parallel access to any resources. Including your custom data to transfer asynchronously.
+IPC::LockTicket - Use Storable library to IPC token to prevent parallel access to any resources. Including your custom data to transfer asynchronously.
 
 =head1 SYNOPSIS
 
+ use strict;
+ use warnings;
  use IPC::LockTicket;
 
  my $object	= IPC::LockTicket->New(@options);
 
  my $object	= IPC::LockTicket->New(qq{name}, 0666);
-
- # ...or
-
+   # ...or
  my $object	= IPC::LockTicket->New(qq{/absolute/path.file}, 0600)
 
  # This fails if the IPC file exists already
  $bol_succcess	= $object->MainLock();
 
- # fork() and do within Children:
+ $bol_succcess	= $object->SetCustomData($reference);
+
+ # fork() and do within Child1:
+ # Child1 represents best practice.
 
  $bol_succcess	= $object->TokenLock(); # Blocks unless lock is aquired.
 
- $bol_succcess	= $object->SetCustomData($reference);
  $reference	= $object->GetCustomData();
+ # Do something with $reference
+ $bol_succcess	= $object->SetCustomData($reference);
 
- $bol_succcess	= $object->TokenUnlock();
+ $bol_succcess	= $object->TokenUnlock(); # Other children can only use the
+   # updated version, but were blocked until this point. Best practice is
+   # keeping the Time between TokenLock() and TokenUnlock() as short as
+   # possible.
 
- # At the end the parent do:
+ # Within a different Child2:
+ $reference	= $object->GetCustomData(); # This is safe, but right after this
+   # call the data might change, because it is not controlled through any mechanism.
+   # This is useful if one just needs to get the current state, but doesn't rely on
+   # persistence.
+
+ # Within another different ChildN:
+ $bol_succcess	= $object->SetCustomData($reference); # This is safe, too, but
+   # it might lead to data loss through overwriting existing data.
+
+ # At the end the parent does:
  $bol_succcess	= $object->MainUnlock();
 
  # Hand over a true value if multiple parents shall use the same IPC file:
@@ -278,13 +299,14 @@ IPC::LockTicket - Use Storable to IPC token to prevent parallel access to any re
 
 =head1 DESCRIPTION
 
-IPC::LockTicket allows you to get a simple token/ticket locking mechanism, making it easy to transport data from different processes including simple traffic light lock mechanism.
+IPC::LockTicket allows one to get a simple token/ticket locking mechanism, like C<flock()> does, but FIFO sorted.
+It also makes it easy to transport small amount of data between processes.
 
-The data you want to transfer must be saved as anonymous reference, and returned as such.
+The data you want to transfer must be saved as an anonymous reference, and returns as such.
 
-The data is not transferred in real time, but only on request. While you might store whole objects if you need the most recent of it, lock the store, load it, change it and store it again, before you unlock it again.
+The data is not transferred in real time, but only on request. While you might store whole objects if you need the most recent of them, lock the store, load it, change it and store it again before you unlock it again.
 
-In theory you can store as much data as your disk can hold, but be aware: this will slow down the lock mechanism. Use multiple files in this case: One only holds data (full path), the other is just for locking (dynamic path).
+In theory, you can store as much data as your disk can hold, but be aware: this will slow down the lock mechanism. Use multiple files in this case: One only holds data (full path), the other is just for locking (dynamic path).
 
 =cut
 
@@ -306,7 +328,7 @@ use English qw( -no_match_vars );
 
 BEGIN {	# Good practice of Exporter but we don't have anything to export
 	our @EXPORT_OK	= ();
-	our $VERSION	= q{2.12};
+	our $VERSION	= q{2.13};
 	}
 
 END {
@@ -361,7 +383,7 @@ my $rxp_OctalNum	= qr{^\o{4}$};
 
  my $object	= IPC::LockTicket->new($str_Name, $oct_Permission) or die;
 
-Creates a new IPC::LockTicket object which is returned. Returns undef on failure. Expects one or two arguments. First the name, optionally secondly the permission as octal number.
+Creates a new IPC::LockTicket object, which is returned. Returns C<undef> on failure. Expects one or two arguments. First the name, optionally secondly the permission as an octal number.
 
 =over 2
 
@@ -372,9 +394,9 @@ Mandatory.
 
 =item permission
 
-Access rights which the lock file will have.
-For example if just a collission pretection shall be impelemented it might be the best to set it to 0666, so collissions can be prevented over the whole system for every user.
-Expects a octal number, like L<chmod(1)>.
+Access rights that the lock file will have.
+For example, if just a collision protection shall be implemented, it might be the best to set it to 0666, so collisions can be prevented over the whole system for every user.
+Expects an octal number, like L<chmod(1)>.
 Defaults to C<0600>.
 
 =back
@@ -455,7 +477,13 @@ sub New {
 
  my $bol_Success	= $object->DESTROY();
 
-Destroys the object so it removes lock files or PIDs from lock files. Usually automatically called on C<die> and C<exit>.
+Destroys the object so it removes lock files or PIDs from lock files. Automatically called on C<undef($object)>, C<die>, C<exit>, and when C<$object> leaves the scope.
+
+B<Not> called if another module C<croak()>s or if the application fails through an exception at runtime.
+
+Z<>
+
+If not called, the next C<MainLock()> will clear the orphan file, but it is not clear that the content was written properly. If the file is empty or cannot be read, it will not be cleared, but C<MainLock()> will fail. See L<C<MainLock>> for further details.
 
 =cut
 
@@ -495,11 +523,11 @@ sub DESTROY {
 			$obj_self->{_har_Data}	= retrieve($obj_self->{_uri_Path});
 
 			# Calculate new data - this is needed, because flock() might have delayed the former request
-			$obj_self->{_har_Data}->{are_PIDs}	= [ do {
+			$obj_self->{_har_Data}{are_PIDs}	= [ do {
 				local $SIG{CLD}			= q{IGNORE};
 				local $SIG{CHLD}		= q{IGNORE};
 
-				grep { kill(0 => $_) } grep { $_ != $$ } @{$obj_self->{_har_Data}->{are_PIDs}};
+				grep { kill(0 => $_) } grep { $_ != $$ } @{$obj_self->{_har_Data}{are_PIDs}};
 				} ];
 
 			store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
@@ -508,7 +536,7 @@ sub DESTROY {
 			close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 
 			# If we exited as last process we now can delete the file
-			if ( ! @{$obj_self->{_har_Data}->{are_PIDs}} ) {
+			if ( ! @{$obj_self->{_har_Data}{are_PIDs}} ) {
 				unlink($obj_self->{_uri_Path});
 				}
 			}
@@ -698,7 +726,7 @@ sub _GetPIDs {
 		return(undef);
 		}
 
-	return(@{$obj_self->{_har_Data}->{are_PIDs}});
+	return(@{$obj_self->{_har_Data}{are_PIDs}});
 	}
 
 # Save a array of integer
@@ -711,7 +739,7 @@ sub _SetPIDs {
 
 		$obj_self->{_har_Data}			= retrieve($obj_self->{_uri_Path});
 
-		$obj_self->{_har_Data}->{are_PIDs}	= [ @int_PIDs ];
+		$obj_self->{_har_Data}{are_PIDs}	= [ @int_PIDs ];
 
 		store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 
@@ -734,7 +762,7 @@ sub _MultipleAllowed {
 		return(undef);
 		}
 
-	return($obj_self->{_har_Data}->{bol_AllowMultiple});
+	return($obj_self->{_har_Data}{bol_AllowMultiple});
 	}
 
 =head3 C<MainLock>
@@ -742,16 +770,18 @@ sub _MultipleAllowed {
  my $bol_Success	= $object->MainLock();
  my $bol_Success	= $object->MainLock(1);
 
-Checks if lock file exists and creates it if not. Failes if file exists and process stored within is alive.
-If a C<true> value is supplied locking is non-exclusive, but shared. If the file exists and was also created non-exclusive, locking is successful. This way the lock file is shared with several processes, requesting non-exclusive mode.
+Checks if a lock file exists and creates it if not. Fails if file exists and process stored within is alive.
+If a C<true> value is supplied, locking is non-exclusive but shared. If the file exists and was also created non-exclusively, locking is successful. This way the lock file is shared with several processes, requesting non-exclusive mode.
 If C<false> is returned from C<MainLock> no lock file was created/claimed.
 Meaning:
 
- _________________________________________________________________________________________________________
- | Call mode        | MainLock() | MainLock() | MainLock()   | MainLock(1) | MainLock(1)  | MainLock(1)  |
- | Lock file        | shared     | exclusive  | non-existent | shared      | exclusive    | non-existent |
- | MainLock returns | false      | false      | true         | true        | false        | true         |
- ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+ ____________________________________________________________________________________________________________________________________
+ | Call mode        | MainLock() | MainLock() | MainLock() | MainLock()   | MainLock(1) | MainLock(1) | MainLock(1)  | MainLock(1)  |
+ | Lock file        | empty*     | shared     | exclusive  | non-existent | empty*      | shared      | exclusive    | non-existent |
+ | MainLock returns | false      | false      | false      | true         | false       | true        | false        | true         |
+ ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+*= empty or any other non-Storable data.
 
 =cut
 
@@ -815,9 +845,9 @@ sub MainLock {
 
 			chmod($obj_self->{_oct_Permission}, $obj_self->{_uri_Path});
 
-			$obj_self->{_har_Data}->{bol_AllowMultiple}		= ( $bol_MultipleAllowed ) ? true : false;
+			$obj_self->{_har_Data}{bol_AllowMultiple}		= ( $bol_MultipleAllowed ) ? true : false;
 			$obj_self->{_pid_Parent}				= $$;
-			push(@{$obj_self->{_har_Data}->{are_PIDs}}, $$);
+			push(@{$obj_self->{_har_Data}{are_PIDs}}, $$);
 
 			lock_store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 			}
@@ -836,8 +866,10 @@ sub MainLock {
 
  $object->MainUnlock();
 
-Removes lock. Lock file is deleted if this is the last process accessing it.
+Removes lock. The lock file is deleted if this is the last process accessing it.
 Returns only a true value.
+
+If it is a shared lock and not the last process accessing it, only the PID entries are removed from the lock file.
 
 =cut
 
@@ -880,11 +912,13 @@ sub MainUnlock {
 
 sub _CleanAgentsList (\@) {
 	my $are_list		= shift;
+	my %bol_TestedParent	= ();
 
 	local $SIG{CLD}		= q{IGNORE};
 	local $SIG{CHLD}	= q{IGNORE};
 
-	return(grep { kill(0 => $_->{_pid_Parent}) && ( $_->{_pid_Agent} == $$ || kill(0 => $_->{_pid_Agent}) ) } @{$are_list});
+	#			if parent was not tested yet		test if alive,			but we don't test ourself,	but any other agent
+	return(grep { ( $bol_TestedParent{$_->{_pid_Parent}}++ || kill(0 => $_->{_pid_Parent}) ) && ( $_->{_pid_Agent} == $$ || kill(0 => $_->{_pid_Agent}) ) } @{$are_list});
 	}
 
 =head3 C<TokenLock>
@@ -892,7 +926,7 @@ sub _CleanAgentsList (\@) {
  $object->TokenLock();
 
 Can only be called after C<MainLock> and before C<MainUnlock> otherwise C<die>s.
-Requests exclusive lock, i.e. any C<TokenLock> is blocking until C<TokenUnlock> was called or the locking process is dead. Process checks are done to prevent infinite locks through broken children or parents, but this is not proper usage. Don't just C<exit> but call C<TokenUnlock> and C<MainUnlock> in appropriate sequence before ending processes!
+Requests exclusive lock, i.e., any C<TokenLock> is blocking until C<TokenUnlock> was called, or the locking process is dead. Process checks are done to prevent infinite locks through broken children or parents, but this is not proper usage. Don't just C<exit>, but call C<TokenUnlock> and C<MainUnlock> in appropriate sequence before ending processes!
 Returns a true value or blocks.
 
 =cut
@@ -916,18 +950,18 @@ sub TokenLock {
 			# Load current data
 			$obj_self->{_har_Data}			= retrieve($obj_self->{_uri_Path});
 
-			@{$obj_self->{_har_Data}->{are_Token}}	= _CleanAgentsList(@{$obj_self->{_har_Data}->{are_Token}});
+			@{$obj_self->{_har_Data}{are_Token}}	= _CleanAgentsList(@{$obj_self->{_har_Data}{are_Token}});
 
 			# If we never got a token, we request one
 			if ( $bol_Init
-			&& ! first { $_->{_pid_Agent} == $$ } @{$obj_self->{_har_Data}->{are_Token}} ) {
+			&& ! first { $_->{_pid_Agent} == $$ } @{$obj_self->{_har_Data}{are_Token}} ) {
 				$bol_Init	= false;
-				push(@{$obj_self->{_har_Data}->{are_Token}}, { _pid_Agent => $$, _pid_Parent => $obj_self->{_pid_Parent} });
+				push(@{$obj_self->{_har_Data}{are_Token}}, { _pid_Agent => $$, _pid_Parent => $obj_self->{_pid_Parent} });
 				}
 			# Die if something strange happened
 			elsif ( ! -e $obj_self->{_uri_Path}
 			|| ( ! $bol_Init
-			&& ! first { $_->{_pid_Parent} == $obj_self->{_pid_Parent} } @{$obj_self->{_har_Data}->{are_Token}} ) ) {
+			&& ! first { $_->{_pid_Parent} == $obj_self->{_pid_Parent} } @{$obj_self->{_har_Data}{are_Token}} ) ) {
 				# Parent exited (and maybe we weren't informed to exit)
 				close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 				exit(120);
@@ -938,7 +972,7 @@ sub TokenLock {
 			close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 
 			# Check if it's our turn
-			if ( $obj_self->{_har_Data}->{are_Token}->[0]->{_pid_Agent} == $$ ) {
+			if ( $obj_self->{_har_Data}{are_Token}[0]{_pid_Agent} == $$ ) {
 				return(true);
 				}
 			# Wait if it isn't our turn yet
@@ -958,17 +992,18 @@ sub TokenLock {
  $object->TokenUnlock();
 
 Can only be called after C<MainLock> and before C<MainUnlock> otherwise C<die>s.
-Removes the token from the lock file so any other request of C<TokenLock> can be statisfied.
-Returns only a true value.
+Removes the token from the lock file so any other request of C<TokenLock> can be satisfied.
+Returns false if unlock is done while not holding the lock.
+Otherwise, it returns true.
 
 =cut
 
 sub TokenUnlock {
 	my $obj_self		= shift;
-	my $int_RemovedToken	= undef;
+	my $bol_Success		= true;
+	my $str_Caller		= (caller(0))[3];
 
 	if ( ! -e $obj_self->{_uri_Path} ) {
-		my $str_Caller	= (caller(0))[3];
 		croak qq{$str_Caller(): Lock file missing\nHave you ever called MainLock() ?\n};
 		}
 
@@ -977,16 +1012,26 @@ sub TokenUnlock {
 
 		$obj_self->{_har_Data}			= retrieve($obj_self->{_uri_Path});
 
-		@{$obj_self->{_har_Data}->{are_Token}}	= _CleanAgentsList(@{$obj_self->{_har_Data}->{are_Token}});
-		$int_RemovedToken			= shift(@{$obj_self->{_har_Data}->{are_Token}});
+		if ( $obj_self->{_har_Data}{are_Token}[0]{_pid_Agent} != $$ ) {
+			carp qq{Lock is on PID $obj_self->{_har_Data}{are_Token}[0]{_pid_Agent}, but PID $$ tries to unlock. Nothing done.\n};
+
+			$bol_Success	= false;
+			}
+
+		@{$obj_self->{_har_Data}{are_Token}}	= grep { $_->{_pid_Agent} != $$ }	# Remove ourself from list, either where we are
+			_CleanAgentsList(@{$obj_self->{_har_Data}{are_Token}});		# Regular clean up
+
 		store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
 
-		my $str_Caller				= (caller(0))[3];
-		if ( $int_RemovedToken->{_pid_Agent} != $$ ) {
-			carp qq{$str_Caller(): Removed token of PID $int_RemovedToken->{_pid_Agent} while running under PID $$ (should be the same)\n};
-			}
 		close($fh) or die qq{$str_Caller(): Unable to close "$obj_self->{_uri_Path}" properly\n};
 		}
+	else {
+		# Open failed
+
+		$bol_Success	= false;
+		}
+
+	return($bol_Success);
 	}
 
 =head3 C<SetCustomData>
@@ -996,7 +1041,7 @@ sub TokenUnlock {
  $object->TokenUnlock();
 
 Writes a custom data reference in a reserved area. See L<CAVEATS> and L<GOOD PRACTICE> for further details.
-Should be preceeded by C<TokenLock()> and followed by C<TokenUnlock()>.
+Should be preceded by C<TokenLock()> and followed by C<TokenUnlock()>.
 Returns only a true value or C<die>s.
 
 =cut
@@ -1023,19 +1068,19 @@ sub SetCustomData {
 		$obj_self->{_har_Data}		= retrieve($obj_self->{_uri_Path});
 
 		if ( ref($ref_Data) eq q{ARRAY} ) {
-			$obj_self->{_har_Data}->{ref_CustomData}	= [ @{$ref_Data} ];
+			$obj_self->{_har_Data}{ref_CustomData}	= [ @{$ref_Data} ];
 			}
 		elsif ( ref($ref_Data) eq q{HASH} ) {
-			$obj_self->{_har_Data}->{ref_CustomData}	= { %{$ref_Data} };
+			$obj_self->{_har_Data}{ref_CustomData}	= { %{$ref_Data} };
 			}
 		elsif ( ref($ref_Data) eq q{SCALAR} ) {
-			$obj_self->{_har_Data}->{ref_CustomData}	= ${$ref_Data} . "";
+			$obj_self->{_har_Data}{ref_CustomData}	= ${$ref_Data} . "";
 			}
 		elsif ( ref($ref_Data) eq q{CODE} ) {
-			$obj_self->{_har_Data}->{ref_CustomData}	= $ref_Data;
+			$obj_self->{_har_Data}{ref_CustomData}	= $ref_Data;
 			}
 		else {  # Undef undef
-			$obj_self->{_har_Data}->{ref_CustomData}	= undef;
+			$obj_self->{_har_Data}{ref_CustomData}	= undef;
 			}
 
 		store($obj_self->{_har_Data}, $obj_self->{_uri_Path});
@@ -1052,7 +1097,7 @@ sub SetCustomData {
  $ref_Data	= $object->GetCustomData();
 
 Load the reference, formerly saved by C<SetCustomData>.
-Returns C<undef> either it was never set or an error occured.
+Returns C<undef> either it was never set or an error occurred.
 
 =cut
 
@@ -1073,7 +1118,7 @@ sub GetCustomData {
 		return(undef);
 		}
 
-	return($obj_self->{_har_Data}->{ref_CustomData});
+	return($obj_self->{_har_Data}{ref_CustomData});
 	}
 
 sub _EndProcedure {
@@ -1084,19 +1129,19 @@ sub _EndProcedure {
 
 =head1 LOCKING
 
-Locking works like a traffic light: Only if honored, it can do it's magic.
+Locking works like a traffic light: Only if honoured, it can do its magic. L<C<flock()>|https://perldoc.perl.org/functions/flock> works the same way: only if all members honour the lock, it can be guaranteed to work properly.
 There are several methods implemented to prevent infinite locks through unexpectedly died processes.
-But the core of this is the token handling itself, providing FIFO locking mechanism. The first process which called C<TokenLock> is the first which will gain the lock. The last process which called C<TokenLock> has to wait until the second to last called C<TokenUnlock>.
-C<TokenLock> is blocking. Until the former processes either call C<TokenUnlock> or unexpectedly die.
+But the core of this is the token handling itself, providing a FIFO locking mechanism. The first process which called C<TokenLock> is the first that will gain the lock. The last process, called C<TokenLock> has to wait until the second to last called C<TokenUnlock>.
+C<TokenLock> is blocking. Until the former processes either call C<TokenUnlock> or unexpectedly died.
 
 =head1 CAVEATS
 
-Using C<SetCustomData> can lead to problems. For example if a huge array is stored, the memory can be exceeded. However, even worse is: the more data is stored within, the slower the locking mechanism gets, because it has to write all the data every time it checks or changes the lock file.
-Refere to L<GOOD PRACTICE> how to prevent this.
+Using C<SetCustomData> can lead to problems. For example, if a huge array is stored, the memory can exceed. However, even worse is: the more data is stored within, the slower the locking mechanism gets, because it has to write all the data every time it checks or changes the lock file.
+Refer to L<GOOD PRACTICE> how to prevent this.
 
 =head1 GOOD PRACTICE
 
-=head3 Transfering hughe amount of data between processes
+=head3 Transferring huge amounts of data between processes
 
  # Parent
  my $obj_Lock	= IPC::LockTicket->New('MyApp');
@@ -1126,16 +1171,16 @@ Refere to L<GOOD PRACTICE> how to prevent this.
 	exit(0);
 	}
 
-Use dynamic naming for locking mechanism only. This way C<IPC::LockTicket> tries to find the best location to store the file on its own, while you keep the file small.
-For use of custom data transfer between processes use full path notation and store on slower, but huge partition.
-This way the lock mechanism can keep its speed, but you can transfere hughe data as well.
-Maybe it is a better idea to use something like a database instead of a lock file. To consider this: the data is stored as a blob from L<Storable>. It is good if you write once and clear the data afterwards. But it will re-write the whole file every time C<SetCustomData> is called. This is inefficient if only a new hash pair shall be added and make your app awfully slow. Better would be to prevent parallel database table access through IPC::LockTicket, so no redundant work happens, while databases are optimized to handle small amount of data. Consider S<C<Child 2>> reading the whole table, then truncating it. After that S<C<Child 1>> might again write something new into the table.
+Use dynamic naming for locking mechanisms only. This way, C<IPC::LockTicket> tries to find the best location to store the file on its own while you keep the file small.
+For use of custom data transfer between processes, use full path notation and store on a slower, but huge partition.
+This way the lock mechanism can keep its speed, but you can transfer huge data as well.
+Maybe it is a better idea to use something like a database instead of a lock file for those situations. To consider this: the data is stored as a blob from L<Storable>. This works well if you write once and clear the data afterwards. But it will re-write the whole file every time C<SetCustomData> is called. This is inefficient if only a new hash pair shall be added and can make your app awfully slow. Better would be to prevent parallel database table access through IPC::LockTicket, so no redundant work happens, while databases are optimized to handle small amounts of data. Consider S<C<Child 2>> reading the whole table, then truncating it. After that S<C<Child 1>> might again write something new into the table.
 
 =head3 Shared locks
 
-It is possible to run C<MainLock(1)> within the children, but this is bad practice and strongly discouraged! Shared locks shall only be shared between the main processes (parents) while children onle use the C<TokenLock> and C<TokenUnlock> methods.
+It is possible to run C<MainLock(1)> within the children, but this is bad practice and strongly discouraged! Shared locks shall only be shared between the main processes (parents) while children only use the C<TokenLock> and C<TokenUnlock> methods.
 The lock objects created through C<New('name')> can be copied though C<fork>ing.
-But C<New> sets what is understood as I<parent> to the calling process. C<MainLock> and C<MainUnlock> expect to be run within the same process.
+But C<New> sets what is understood as the I<parent> PID to the calling process. C<MainLock> and C<MainUnlock> expect to be run within the I<parent> process.
 C<TokenLock> is more optimized for speed than C<MainLock> is.
 
 =head1 AUTHOR
@@ -1146,13 +1191,19 @@ Dominik Bernhardt, domasprogrammer@gmail.com
 
 Thanks for the hard time, much to learn and ideas I got through:
 
- Storable
- IPC::Shareable
- flock
+=over 2
+
+=item L<Storable|https://metacpan.org/pod/Storable>
+
+=item L<IPC::Shareable|https://metacpan.org/pod/IPC::Shareable>
+
+=item L<C<flock()>|https://perldoc.perl.org/functions/flock>
+
+=back
 
 =head1 SEE ALSO
 
-L<perl(1)>, L<Storable>, L<IPC::Shareable>
+L<perl(1)>, L<Storable|https://metacpan.org/pod/Storable>
 
 =cut
 

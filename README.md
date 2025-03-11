@@ -12,9 +12,11 @@ Exception: new() is a synonym for New().
 
 ## INSTALLATION
 Usually you just have to run these three commands:
+
   `perl Makefile.PL`
   `make`
   `make install`
+
 If ran on a systemd based OS you should have `/dev/shm` as main shared memory for IPC, else check the following.
 On any else \*NIX based system you should provide a tmpfs, as `/run` or at least as `/tmp` for speed purpoises.
 Easy way for e.g. FreeBSD: `mount -t tmpfs tmpfs /run`
